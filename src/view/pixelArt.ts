@@ -70,3 +70,14 @@ export function pixelCount(g: PixelGrid): number {
   for (const r of g) for (let i = 0; i < r.length; i++) if (r[i] === '#') n++;
   return n;
 }
+
+/** 채워진 칸의 [열, 행] 좌표를 한 줄로 이은 목록 (c0, r0, c1, r1, ...). 정의 시점에 한 번만 계산해 둔다. */
+export function filledCells(g: PixelGrid): Int16Array {
+  const out = new Int16Array(pixelCount(g) * 2);
+  let n = 0;
+  for (let r = 0; r < g.length; r++) {
+    const row = g[r]!;
+    for (let c = 0; c < row.length; c++) if (row[c] === '#') { out[n++] = c; out[n++] = r; }
+  }
+  return out;
+}

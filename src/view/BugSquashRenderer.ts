@@ -2,12 +2,13 @@ import { DEFAULT_CONFIG } from '../core/config';
 import { createRng } from '../core/rng';
 import type { BugSquashEvent, BugSquashLogic } from '../core/BugSquashLogic';
 import { expandAnimT, popScale, smoothstep01 } from './anim';
+import { crtOffCurve, endFadeAlpha, glitchOffset, type CrtOffState } from './fxCurves';
 import { cellBox, computeBoardRect, expandCellBox, newCellBox, type BoardRect } from './layout';
-import { crtFlickerValue, expandFadeAlphas } from './motionPolicy';
-import { shakeAmplitude } from './shake';
+import { crtFlickerValue, endDuration, expandFadeAlphas } from './motionPolicy';
+import { pixelBlockPx } from './objectBounds';
 import { SpriteId, Sprites } from './sprites';
-import { drawFlashes, drawGhosts, drawParticlesAndRings, drawTexts } from './fxDraw';
-import { FxState } from './fxState';
+import { drawFlashes, drawParticles, drawTexts } from './fxDraw';
+import { EndMode, FxState } from './fxState';
 import { TextCache } from './fxText';
 import { CodeLog, codeLogRows, codeLogUnitWidth } from './codeLog';
 import { buildCrtOverlay } from './crtOverlay';
@@ -20,7 +21,12 @@ export class BugSquashRenderer {
   private readonly box = newCellBox();
   private readonly fx = new FxState(createRng(VIEW_CONFIG.viewSeed ^ 0x9e3779b9));
   private readonly text = new TextCache();
-  private readonly shake = { x: 0, y: 0 };
+  private readonly crtOff: CrtOffState = { scaleX: 1, scaleY: 1, glow: 0 };
+  /** 화면 글리치/CRT 꺼짐용 오프스크린 레이어 (보드 + fx만). 해당 연출 중에만 그린다. */
+  private layer: HTMLCanvasElement | null = null;
+  private layerCtx: CanvasRenderingContext2D | null = null;
+  private layerY0 = 0;
+  private layerY1 = 0;
   private readonly fade = { old: 1, next: 1 };
   private crt: HTMLCanvasElement | null = null;
   /** 깜박임을 끈 모드용: 기본 어둡기를 구워 넣은 오버레이 (처음 필요할 때 한 번 만든다). */
@@ -60,7 +66,34 @@ export class BugSquashRenderer {
     this.crtBaked = null;
     this.sprites.build(this._board.size, dpr, [VIEW_CONFIG.smallGrid, DEFAULT_CONFIG.largeBoardSize]);
     this.text.build(this._board.size, dpr);
+    // 픽셀 분해 조각 크기 = 스프라이트가 실제로 그리는 정수 블록 크기 (스프라이트 세트와 같은 식).
+    for (const n of [VIEW_CONFIG.smallGrid, DEFAULT_CONFIG.largeBoardSize]) {
+      const px = Math.max(8, Math.round((this._board.size / n) * dpr));
+      this.fx.setBlockFrac(n, pixelBlockPx(px) / px);
+    }
+    this.buildLayer();
   }
+
+  /**
+   * 보드 위아래로 팝업 여유(layerPad)를 더한 가로 띠(높이 layerY1 - layerY0)만큼만 오프스크린 캔버스를 만든다. 리사이즈 때만.
+   * 그릴 때 translate(0, -layerY0)로 메인 캔버스와 같은 좌표를 쓴다.
+   */
+  private buildLayer(): void {
+    const b = this._board;
+    const pad = (b.size / DEFAULT_CONFIG.smallBoardSize) * VIEW_CONFIG.fx.layerPad;
+    this.layerY0 = Math.max(0, Math.floor(b.y - pad));
+    this.layerY1 = Math.min(this.cssH, Math.ceil(b.y + b.size + pad));
+    const c = document.createElement('canvas');
+    c.width = this.canvas.width;
+    c.height = Math.max(1, Math.round((this.layerY1 - this.layerY0) * this.dpr));
+    const g = c.getContext('2d');
+    this.layer = g ? c : null;
+    this.layerCtx = g;
+    g?.setTransform(this.dpr, 0, 0, this.dpr, 0, -this.layerY0 * this.dpr);
+  }
+
+  /** 게임 오버 오버레이를 늦출 시간(초): 현재 정책의 종료 연출 길이. */
+  get endDelay(): number { return endDuration(this.fx.policy); }
 
   /** core 이벤트(update/tap 결과)를 연출로 바꾼다. 버퍼는 이 호출 안에서만 읽는다. */
   consume(events: { length: number; at(i: number): BugSquashEvent }, logic: BugSquashLogic): void {
@@ -73,7 +106,7 @@ export class BugSquashRenderer {
   /** 새 게임 시작 시 남은 연출을 비우고 시작 그리드 크기를 맞춘다. */
   resetFx(logic: BugSquashLogic): void { this.fx.reset(logic.boardSize); }
 
-  /** Reduced motion: 정책은 motionPolicy (흔들림 0, 입자 축소, 확장은 페이드). */
+  /** Reduced motion: 정책은 motionPolicy (글리치/CRT 꺼짐/타이핑 끔, 조각 축소, 확장은 페이드). */
   setReducedMotion(on: boolean): void { this.fx.setReducedMotion(on); }
 
   /** 폰트 로드 후 호출: 글로우 텍스트 캐시를 다시 만들게 한다. */
@@ -113,22 +146,53 @@ export class BugSquashRenderer {
     this.time += dt;
     this.codeLog.update(dt);
     const fx = this.fx;
+    const policy = fx.policy;
 
     // 배경: 단색 + 코드 로그 (한 겹, 보드 뒤)
     ctx.fillStyle = c.bg;
     ctx.fillRect(0, 0, this.cssW, this.cssH);
     this.drawCodeLog(ctx);
 
-    // 보드 쪽은 화면 흔들림 적용 (배경은 고정)
-    const bd = this._board;
-    fx.screenShake(this.shake);
-    ctx.save();
-    ctx.translate(this.shake.x * bd.size, this.shake.y * bd.size);
+    // 보드 + fx 레이어. 게임 오버 연출(CRT 꺼짐/페이드)이나 화면 글리치 중에는 오프스크린에 그린 뒤 변형해서 합성한다.
+    // 평소에는 메인 캔버스에 바로 그린다. (게임 오버 연출이 끝나면 resetFx 전까지 비워 둔다.)
+    const ending = fx.endT >= 0;
+    const layered = this.layer !== null && (ending ? !fx.boardHidden : fx.screenGlitchT >= 0);
+    if (!(ending && fx.boardHidden)) {
+      if (layered) {
+        const lg = this.layerCtx!;
+        // 정수 디바이스 px로 1px 여유를 두고 지운다 (DPR 1.5에서 반쯤 남는 줄 방지).
+        const d = this.dpr;
+        lg.clearRect(-1 / d, this.layerY0 - 1 / d, this.cssW + 2 / d, this.layerY1 - this.layerY0 + 2 / d);
+        this.drawBoardLayer(lg, logic, dt);
+        if (ending) this.compositeEnd(ctx); else this.compositeGlitch(ctx);
+      } else {
+        this.drawBoardLayer(ctx, logic, dt);
+      }
+    }
 
+    // CRT 오버레이 (맨 위): 스캔라인 + 비네팅. 깜박임을 끈 모드는 기본 어둡기를 오버레이에 구워 두어 전체 화면 fillRect 를 생략한다.
+    if (policy.crtFlicker) {
+      if (this.crt) ctx.drawImage(this.crt, 0, 0, this.cssW, this.cssH);
+      ctx.fillStyle = '#000';
+      ctx.globalAlpha = c.crt.flickerAmp + crtFlickerValue(policy, this.time);
+      ctx.fillRect(0, 0, this.cssW, this.cssH);
+      ctx.globalAlpha = 1;
+    } else {
+      this.crtBaked ??= buildCrtOverlay(this.cssW, this.cssH, this.dpr, true);
+      ctx.drawImage(this.crtBaked, 0, 0, this.cssW, this.cssH);
+    }
+  }
+
+  /** 칸 + 오브젝트 + fx를 g 에 그린다. */
+  private drawBoardLayer(g: CanvasRenderingContext2D, logic: BugSquashLogic, dt: number): void {
+    const c = VIEW_CONFIG;
+    const fx = this.fx;
+    const bd = this._board;
+    const policy = fx.policy;
+    g.save();
     // 칸 + 오브젝트
     const grid = logic.boardSize;
     const expanding = logic.isExpanding;
-    const policy = fx.policy;
     const prog = smoothstep01(expandAnimT(logic.expandProgress, DEFAULT_CONFIG.expandPause, policy.expandDuration));
     const n = logic.cellCount;
     const box = this.box;
@@ -142,8 +206,8 @@ export class BugSquashRenderer {
       const small = c.smallGrid;
       for (let j = 0; j < small * small; j++) {
         cellBox(this._board, small, j, box);
-        ctx.globalAlpha = a.old;
-        ctx.drawImage(spSmall.cellNormal, snap(box.cx - box.size / 2, dpr), snap(box.cy - box.size / 2, dpr), box.size, box.size);
+        g.globalAlpha = a.old;
+        g.drawImage(spSmall.cellNormal, snap(box.cx - box.size / 2, dpr), snap(box.cy - box.size / 2, dpr), box.size, box.size);
       }
     }
     for (let i = 0; i < n; i++) {
@@ -154,12 +218,12 @@ export class BugSquashRenderer {
       else cellBox(this._board, grid, i, box);
       const cell = logic.getCell(i);
       const occupied = cell.kind !== null;
-      ctx.globalAlpha = box.alpha;
+      g.globalAlpha = box.alpha;
       // 정지 상태에서는 스프라이트 원래 크기로 디바이스 픽셀에 스냅해 그린다 (또렷하게). 확장 중에는 보간 크기.
       const cw = expanding ? box.size : sp.cellPx / dpr;
       const cx0 = expanding ? box.cx - cw / 2 : snap(box.cx - cw / 2, dpr);
       const cy0 = expanding ? box.cy - cw / 2 : snap(box.cy - cw / 2, dpr);
-      ctx.drawImage(occupied ? sp.cellBright : sp.cellNormal, cx0, cy0, cw, cw);
+      g.drawImage(occupied ? sp.cellBright : sp.cellNormal, cx0, cy0, cw, cw);
       if (!occupied) continue;
       const elapsed = cell.duration - cell.remaining;
       let s = popScale(elapsed, cell.remaining);
@@ -174,44 +238,98 @@ export class BugSquashRenderer {
         case 'feature': id = SpriteId.Feature; break;
         default: id = SpriteId.Bug;
       }
-      let ox = 0;
-      const sh = fx.cellShake[i]!;
-      if (sh >= 0) ox = shakeAmplitude(sh, c.fx.hitShakeDuration, box.size * c.fx.hitShakeAmp * policy.shakeScale) * Math.sin(sh * c.fx.hitShakeFreq);
       if (cell.kind === 'golden') fx.sparkle((box.cx - bd.x) / bd.size, (box.cy - bd.y) / bd.size, box.size / bd.size, dt);
       // 스케일 1(정지)이면 원래 크기로 스냅, 팝/맥동/확장 중에는 분수 스케일(스무딩 허용).
-      const natural = s === 1 && !expanding && ox === 0;
+      const gl = fx.cellGlitch[i]!;
+      const glitching = gl >= 0 && policy.glitch && !expanding;
+      const natural = s === 1 && !expanding;
       const d = natural ? sp.surfPx / dpr : box.size * s * (1 + 2 * c.objectPad);
-      const left = natural ? snap(box.cx - d / 2, dpr) : box.cx + ox - d / 2;
+      const left = natural ? snap(box.cx - d / 2, dpr) : box.cx - d / 2;
       const top = natural ? snap(box.cy - d / 2, dpr) : box.cy - d / 2;
-      ctx.drawImage(sp.objects[id]!, left, top, d, d);
+      if (glitching) this.drawGlitched(g, sp.objects[id]!, sp.surfPx, left, top, d, i, gl, box.size);
+      else g.drawImage(sp.objects[id]!, left, top, d, d);
       if (cell.kind === 'golden' && (this.time % c.goldenCursor.period) < c.goldenCursor.period * c.goldenCursor.onRatio) {
         // 깜박이는 터미널 커서 `_`: 버그 바로 아래, 스프라이트 블록 그리드에 스냅
         const k = d / sp.surfPx;
         const cur = sp.cursor;
-        ctx.fillStyle = c.goldenCursor.color;
-        ctx.fillRect(left + cur.x * k, top + cur.y * k, cur.w * k, cur.h * k);
+        g.fillStyle = c.goldenCursor.color;
+        g.fillRect(left + cur.x * k, top + cur.y * k, cur.w * k, cur.h * k);
       }
     }
-    ctx.globalAlpha = 1;
+    g.globalAlpha = 1;
 
-    drawFlashes(ctx, fx, bd);
-    drawGhosts(ctx, fx, bd, this.sprites);
-    drawParticlesAndRings(ctx, fx, bd);
-    drawTexts(ctx, fx, bd, this.text);
-    ctx.restore();
+    drawFlashes(g, fx, bd);
+    drawParticles(g, fx, bd);
+    drawTexts(g, fx, bd, this.text);
+    g.restore();
+  }
 
-    // CRT 오버레이 (맨 위): 스캔라인 + 비네팅. 깜박임을 끈 모드는 기본 어둡기를 오버레이에 구워 두어 전체 화면 fillRect 를 생략한다.
-    if (policy.crtFlicker) {
-      if (this.crt) ctx.drawImage(this.crt, 0, 0, this.cssW, this.cssH);
-      ctx.fillStyle = '#000';
-      ctx.globalAlpha = c.crt.flickerAmp + crtFlickerValue(policy, this.time);
-      ctx.fillRect(0, 0, this.cssW, this.cssH);
-      ctx.globalAlpha = 1;
-    } else {
-      this.crtBaked ??= buildCrtOverlay(this.cssW, this.cssH, this.dpr, true);
-      ctx.drawImage(this.crtBaked, 0, 0, this.cssW, this.cssH);
+  /** 단단한 버그 1타: 스프라이트를 가로 띠로 나눠 띠마다 다른 x 오프셋으로 그린다 (소스 사각형 지정, 할당 없음). */
+  private drawGlitched(g: CanvasRenderingContext2D, img: HTMLCanvasElement, surf: number, left: number, top: number, d: number, cell: number, elapsed: number, boxSize: number): void {
+    const F = VIEW_CONFIG.fx;
+    const bands = F.cellGlitchBands;
+    const k = d / surf;
+    const amp = F.cellGlitchAmp * boxSize;
+    for (let j = 0; j < bands; j++) {
+      const sy = Math.floor((j * surf) / bands);
+      const sh = Math.floor(((j + 1) * surf) / bands) - sy;
+      if (sh <= 0) continue;
+      const dx = glitchOffset(this.fx.cellGlitchUnits[cell * F.maxGlitchBands + j]!, elapsed, F.cellGlitchDuration, amp, true);
+      g.drawImage(img, 0, sy, surf, sh, left + dx, top + sy * k, d, sh * k);
     }
   }
+
+  /** 화면 글리치: 레이어를 가로 띠로 나눠 띠마다 다른 x 오프셋으로 합성한다 (띠 N번 drawImage). */
+  private compositeGlitch(ctx: CanvasRenderingContext2D): void {
+    const fx = this.fx;
+    const L = this.layer!;
+    const dpr = this.dpr;
+    const n = VIEW_CONFIG.fx.screenGlitchBands;
+    const h = this.layerY1 - this.layerY0;
+    const amp = VIEW_CONFIG.fx.screenGlitchAmp * this._board.size;
+    for (let k = 0; k < n; k++) {
+      const sy = Math.round(fx.screenGlitchEdges[k]! * h * dpr);
+      const ey = Math.round(fx.screenGlitchEdges[k + 1]! * h * dpr);
+      if (ey <= sy) continue;
+      const dx = glitchOffset(fx.screenGlitchUnits[k]!, fx.screenGlitchT, VIEW_CONFIG.fx.screenGlitchDuration, amp, fx.policy.glitch);
+      ctx.drawImage(L, 0, sy, L.width, ey - sy, dx, this.layerY0 + sy / dpr, this.cssW, (ey - sy) / dpr);
+    }
+  }
+
+  /** 게임 오버: CRT 꺼짐(세로 수축 + 밝은 가로선 -> 점) 또는 reduced 짧은 페이드. */
+  private compositeEnd(ctx: CanvasRenderingContext2D): void {
+    const fx = this.fx;
+    const F = VIEW_CONFIG.fx;
+    const L = this.layer!;
+    const y0 = this.layerY0;
+    const h = this.layerY1 - y0;
+    const cy = y0 + h / 2;
+    const sy = 0;
+    const sh = L.height;
+    if (fx.endMode === EndMode.Fade) {
+      ctx.globalAlpha = endFadeAlpha(fx.endT, fx.endDuration);
+      ctx.drawImage(L, 0, sy, L.width, sh, 0, y0, this.cssW, h);
+      ctx.globalAlpha = 1;
+      return;
+    }
+    const s = crtOffCurve(fx.endT, fx.endDuration, this.crtOff);
+    const w = this.cssW * s.scaleX;
+    const hh = h * s.scaleY;
+    const x = (this.cssW - w) / 2;
+    const th = Math.max(hh, F.crtOffLinePx);
+    if (s.scaleX >= 1) {
+      ctx.drawImage(L, 0, sy, L.width, sh, x, cy - hh / 2, w, hh);
+      ctx.fillStyle = F.crtOffColor;
+      ctx.globalAlpha = s.glow * s.glow;
+      ctx.fillRect(x, cy - th / 2, w, th);
+    } else {
+      ctx.fillStyle = F.crtOffColor;
+      ctx.globalAlpha = 1;
+      ctx.fillRect(x, cy - F.crtOffLinePx / 2, Math.max(w, F.crtOffLinePx), F.crtOffLinePx);
+    }
+    ctx.globalAlpha = 1;
+  }
+
 }
 
 /** CSS px 좌표를 디바이스 픽셀 경계에 스냅. */

@@ -110,6 +110,9 @@ if (canvas instanceof HTMLCanvasElement) {
     );
   };
 
+  /** CRT 꺼짐이 끝나기를 기다리는 게임 오버 오버레이. 재시작하면 취소된다. */
+  let overlay: { remaining: number; isNewBest: boolean; round: number } | null = null;
+
   const onGameOver = (): void => {
     if (!flow.endGame()) return;
     input.setEnabled(false);
@@ -118,6 +121,12 @@ if (canvas instanceof HTMLCanvasElement) {
     result.maxCombo = logic.maxCombo;
     result.time = logic.time;
     const isNewBest = best.submit(result.score);
+    // 오버레이는 CRT 꺼짐(reduced이면 페이드)이 끝난 뒤에 보인다. flow 상태와 입력 잠금(0.6초)은 바로 시작한다.
+    overlay = { remaining: renderer.endDelay, isNewBest, round: flow.round };
+  };
+
+  /** 지연된 게임 오버 오버레이를 실제로 띄운다. */
+  const showGameOverOverlay = (isNewBest: boolean): void => {
     ui.setPhase('gameOver');
     ui.showGameOver({ score: result.score, best: best.value, isNewBest }, profile.nickname);
     ui.setTitleBest(best.value);
@@ -164,6 +173,7 @@ if (canvas instanceof HTMLCanvasElement) {
     // 숨겨질 닉네임 입력/버튼에 포커스가 남아 다음 판 Space가 막히지 않게
     const active = document.activeElement;
     if (active instanceof HTMLElement && (isTextTarget(active) || active === ui.retryButton)) active.blur();
+    overlay = null;
     logic = newLogic(seed, overrides);
     renderer.resetFx(logic);
     audio.unduck();
@@ -380,6 +390,14 @@ if (canvas instanceof HTMLCanvasElement) {
     }
     renderer.advanceFx(dt);
     flow.update(dt);
+    if (overlay) {
+      overlay.remaining -= dt;
+      if (overlay.remaining <= 0) {
+        const o = overlay;
+        overlay = null;
+        if (flow.round === o.round && flow.phase === 'gameOver') showGameOverOverlay(o.isNewBest);
+      }
+    }
     if (flow.phase === 'playing') {
       input.drain(onCell);
       if (flow.phase === 'playing') dispatch(logic.update(dt)); // drain 중 게임 오버가 났으면 건너뜀

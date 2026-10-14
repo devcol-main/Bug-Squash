@@ -111,46 +111,38 @@ export const VIEW_CONFIG = {
 
   // --- VFX (시간 초, 길이는 보드 한 변 / 칸 한 변 비율) ---
   fx: {
-    /** 풀 크기. 가득 차면 가장 오래 전에 배정한 항목을 덮어쓴다. */
-    particlePool: 160,
+    /** 풀 크기. 가득 차면 가장 오래 전에 배정한 항목을 덮어쓴다. 입자 풀은 픽셀 분해 조각(잡기 1회 약 50개)과 골든 반짝임이 같이 쓴다. */
+    particlePool: 320,
     popupPool: 16,
-    ringPool: 8,
     flashPool: 16,
-    ghostPool: 16,
-    /** 잡기 squash: 지속(초), 최종 가로/세로 배율. */
-    squashDuration: 0.14,
-    squashX: 1.45,
-    squashY: 0.25,
-    /** 기능 탭 톱니 소멸: 지속, 최종 배율, 회전(rad). */
-    gearDuration: 0.22,
-    gearEndScale: 0.2,
-    gearSpin: 1.6,
     /** 칸 외곽선 플래시. */
     flashDuration: 0.22,
     flashLineWidth: 0.05,
     flashFillAlpha: 0.18,
     missFlashDuration: 0.18,
     featureColor: '#FF3B3B',
-    /** 입자: 개수, 속도(칸 한 변/초), 수명, 크기(칸 한 변 비율). */
-    catchParticles: 9,
-    hardCatchParticles: 12,
-    goldenParticles: 20,
-    particleSpeedMin: 0.9,
-    particleSpeedMax: 2.2,
-    particleLife: 0.45,
-    particleDrag: 3.2,
-    particleSize: 0.07,
+    /** 반전 플래시(칸 전체를 색으로 채웠다가 사라짐): 골든 잡기, 기능 탭. */
+    invertFlashDuration: 0.16,
+    /**
+     * 픽셀 분해: 스프라이트의 채워진 칸을 sampleStep 칸마다 1개씩 입자로 만든다 (2 = 절반, 약 50개).
+     * Reduced motion 에서는 stride = round(sampleStep / particleScale) (= 4, 약 25개).
+     * 속도(칸 한 변/초: 중심에서 바깥으로), 중력(칸 한 변/초^2), 감속, 수명 범위(초).
+     */
+    dissolveSampleStep: 2,
+    dissolveSpeedMin: 0.5,
+    dissolveSpeedMax: 1.5,
+    dissolveGravity: 2.4,
+    dissolveDrag: 2.2,
+    dissolveLifeMin: 0.3,
+    dissolveLifeMax: 0.45,
+    /** 분해 조각 방향의 각도 지터 (rad, 전체 폭). */
+    dissolveAngleJitter: 0.9,
     /** 골든 반짝임: 초당 개수, 수명, 크기, 퍼짐(칸 비율). */
     sparkleRate: 14,
     sparkleLife: 0.55,
     sparkleSize: 0.05,
     sparkleSpread: 0.42,
     sparkleRise: 0.35,
-    /** 링 파동. */
-    ringDuration: 0.5,
-    ringStart: 0.25,
-    ringEnd: 1.3,
-    ringLineWidth: 0.06,
     /** 점수 팝업: 지속, 떠오르는 거리(칸 비율), 글자 높이(칸 비율), 글로우(글자 높이 비율). */
     popupDuration: 0.8,
     popupRise: 0.7,
@@ -166,36 +158,49 @@ export const VIEW_CONFIG = {
     scoreGlow: '#39FF88',
     goldenTextColor: '#FFF6D0',
     goldenTextGlow: '#FFF6D0',
-    /** 확장 배너. */
-    bannerText: 'SCALING UP',
+    /** 확장 배너: 한 글자씩 타이핑(typeDuration초) -> 커서 깜박임 -> 마지막 fadeOut 비율 동안 페이드. */
+    bannerText: '> SCALING UP',
     bannerColor: '#39FF88',
     bannerGlow: '#39FF88',
     bannerDuration: 1.3,
+    bannerTypeDuration: 0.5,
+    bannerCursorPeriod: 0.3,
     bannerFont: 0.12,
     bannerGlowRatio: 0.3,
-    /** 배너 진행도 구간: 페이드 인 끝, 페이드 아웃 길이, 시작 배율, 배율 복귀 끝. */
-    bannerFadeIn: 0.12,
     bannerFadeOut: 0.3,
-    bannerScaleStart: 0.85,
-    bannerScaleEnd: 0.25,
     /** 미리 만들어 둘 텍스트. */
     scoreTexts: ['+10', '+20', '+25', '+30', '+40', '+50', '+75', '+100', '+150', '+200'],
     goldenTexts: ['+1 LIFE', '+50', '+100', '+150', '+200'],
-    /** 단단한 버그 1타 흔들림: 지속, 진폭(칸 비율), 진동 속도(rad/s). */
-    hitShakeDuration: 0.2,
-    hitShakeAmp: 0.07,
-    hitShakeFreq: 60,
-    /** 화면 흔들림: 지속, 진폭(보드 한 변 비율), 진동 속도. */
-    screenShakeFeature: { duration: 0.3, amp: 0.018 },
-    screenShakeGameOver: { duration: 0.45, amp: 0.026 },
-    screenShakeFreqX: 71,
-    screenShakeFreqY: 53,
+    /**
+     * 단단한 버그 1타: 칸 안 가로 줄 어긋남 글리치. 지속(초), 띠 개수(최대 maxGlitchBands), 최대 x 오프셋(칸 한 변 비율), 부호 뒤집기 속도(Hz).
+     */
+    cellGlitchDuration: 0.18,
+    cellGlitchBands: 4,
+    cellGlitchAmp: 0.14,
+    glitchFlipRate: 30,
+    maxGlitchBands: 6,
+    /** 화면 글리치(기능 탭): 지속, 띠 개수, 최대 x 오프셋(보드 한 변 비율), 띠가 어긋날 확률. */
+    screenGlitchDuration: 0.2,
+    screenGlitchBands: 5,
+    screenGlitchAmp: 0.045,
+    screenGlitchShiftChance: 0.7,
+    /** 띠 경계 지터 (띠 폭 비율, 한쪽). 0.5 미만이어야 경계가 뒤집히지 않는다. */
+    screenGlitchEdgeJitter: 0.3,
+    /** 화면 글리치/CRT 꺼짐 레이어가 보드 위아래로 더 덮는 영역 (칸 한 변 비율. 팝업 여유). */
+    layerPad: 0.4,
+    /** 게임 오버 CRT 꺼짐: 지속, 세로 수축 구간 비율, 가로선 최소 높이 비율, 가로선 색/두께(CSS px). */
+    crtOffDuration: 0.4,
+    crtOffSquashPortion: 0.75,
+    crtOffLineScale: 0.02,
+    crtOffColor: '#D8FFE8',
+    crtOffLinePx: 3,
     /**
      * Reduced motion 정책 값 (motionPolicy.ts가 읽는다).
-     * shakeScale 0 = 화면/칸 흔들림 없음. particleScale = 입자 개수와 크기 배율. sparkleScale = 골든 반짝임 빈도 배율.
-     * fadeExpand = 보드 확장을 칸 이동 대신 짧은 페이드로 (expandFadeDuration초). bannerScaleAnim false = 배너는 페이드만.
+     * particleScale = 픽셀 분해 조각 수 배율. sparkleScale = 골든 반짝임 빈도 배율.
+     * fadeExpand = 보드 확장을 칸 이동 대신 짧은 페이드로 (expandFadeDuration초).
+     * glitch/crtOff/typing false = 칸/화면 글리치, CRT 꺼짐, 배너 타이핑 없음 (게임 오버는 endFadeDuration초 페이드, 배너는 전체 문자열을 바로 표시).
      */
-    reduced: { shakeScale: 0, particleScale: 0.5, sparkleScale: 0.25, fadeExpand: true, expandFadeDuration: 0.25, bannerScaleAnim: false, crtFlicker: false },
+    reduced: { particleScale: 0.5, sparkleScale: 0.25, fadeExpand: true, expandFadeDuration: 0.25, glitch: false, crtOff: false, typing: false, crtFlicker: false, endFadeDuration: 0.25 },
   },
 
   /** view 전용 rng 시드 (core rng와 분리, 값은 임의). */

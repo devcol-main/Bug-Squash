@@ -29,6 +29,9 @@ const defaultCreate: CreateSurface = (w, h) => {
 
 export class TextCache {
   private readonly maps: Map<string, TextSprite>[] = [new Map(), new Map(), new Map()];
+  /** 배너 접두사 스프라이트: [글자 수] = 접두사 + 커서 `_`. noCursor = 전체 문자열(커서 없음). build 시점에 미리 만들고 이후 배열 조회만 한다. */
+  private readonly bannerPrefix: (TextSprite | undefined)[] = [];
+  private bannerNoCursor: TextSprite | undefined;
   private measureCtx: CanvasRenderingContext2D | null = null;
   private boardSize = 0;
   private dpr = 1;
@@ -43,11 +46,22 @@ export class TextCache {
     // 플레이 중 첫 사용 끊김을 없애기 위해 가능한 문자열을 미리 만든다.
     for (const t of FX.scoreTexts) this.get(TextStyle.Score, t);
     for (const t of FX.goldenTexts) this.get(TextStyle.Golden, t);
-    this.get(TextStyle.Banner, FX.bannerText);
+    for (let n = 0; n <= FX.bannerText.length; n++) this.banner(n, true);
+    this.banner(FX.bannerText.length, false);
+  }
+
+  /** 배너의 앞 n글자 (+ 커서). 같은 n이면 항상 같은 스프라이트. 없으면 한 번 그려서 캐시한다. */
+  banner(n: number, cursor: boolean): TextSprite {
+    const len = FX.bannerText.length;
+    const k = Math.max(0, Math.min(len, n));
+    if (cursor || k < len) return (this.bannerPrefix[k] ??= this.draw(TextStyle.Banner, FX.bannerText.slice(0, k) + '_'));
+    return (this.bannerNoCursor ??= this.draw(TextStyle.Banner, FX.bannerText));
   }
 
   invalidateTextCache(): void {
     for (const m of this.maps) m.clear();
+    this.bannerPrefix.length = 0;
+    this.bannerNoCursor = undefined;
   }
 
   /** 없으면 한 번 그려서 캐시한다. 이후 같은 문자열은 Map 조회만 한다. */

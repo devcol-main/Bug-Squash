@@ -5,7 +5,7 @@ import { InputQueue } from '../src/input/InputQueue';
 import { FrameClock } from '../src/ui/frameClock';
 import { PauseController } from '../src/ui/pause';
 import { watchDpr, type MediaQueryLike } from '../src/ui/dprWatcher';
-import { bannerScale, expandFadeAlphas, motionPolicy } from '../src/view/motionPolicy';
+import { expandFadeAlphas, motionPolicy } from '../src/view/motionPolicy';
 import { FxState } from '../src/view/fxState';
 import { VIEW_CONFIG } from '../src/view/viewConfig';
 import { expandAnimT } from '../src/view/anim';
@@ -91,27 +91,31 @@ describe('pause', () => {
 });
 
 describe('motion policy', () => {
-  it('reduced on -> screen shake scale is 0', () => {
-    expect(motionPolicy(true).shakeScale).toBe(0);
+  it('reduced on -> glitch, CRT off and typing are disabled, and the screen never glitches', () => {
+    const r = motionPolicy(true);
+    expect([r.glitch, r.crtOff, r.typing]).toEqual([false, false, false]);
     const fx = new FxState(createRng(1));
     fx.setReducedMotion(true);
     fx.consume({ length: 1, at: () => ({ type: 'featureTapped', cell: 0, kind: 'feature', points: 0, lifeDelta: 0 }) } as never, 3);
-    const out = { x: 1, y: 1 };
-    fx.update(0.05);
-    fx.screenShake(out);
-    expect(out.x).toBeCloseTo(0);
-    expect(out.y).toBeCloseTo(0);
+    expect(fx.screenGlitchT).toBe(-1);
   });
-  it('reduced off -> full policy (shake 1, particles 1, sparkle 1, no fade, banner scales)', () => {
+  it('reduced off -> full policy (glitch, CRT off, typing on, particles 1, sparkle 1, no fade)', () => {
     const p = motionPolicy(false);
-    expect([p.shakeScale, p.particleScale, p.sparkleScale]).toEqual([1, 1, 1]);
+    expect([p.particleScale, p.sparkleScale]).toEqual([1, 1]);
+    expect([p.glitch, p.crtOff, p.typing]).toEqual([true, true, true]);
     expect(p.fadeExpand).toBe(false);
-    expect(p.bannerScaleAnim).toBe(true);
     expect(p.expandDuration).toBe(VIEW_CONFIG.expandAnimDuration);
   });
-  it('reduced on -> fewer and smaller particles, rarer golden sparkles', () => {
+  it('reduced on -> fewer pieces (same piece size), rarer golden sparkles', () => {
     const p = motionPolicy(true);
     expect(p.particleScale).toBeLessThan(1);
+    const sizes = [false, true].map((r) => {
+      const fx = new FxState(createRng(1), 4);
+      fx.setReducedMotion(r);
+      fx.consume({ length: 1, at: () => ({ type: 'caught', cell: 0, kind: 'bug', points: 10, lifeDelta: 0 }) } as never, 4);
+      return fx.particles.items.find((q) => q.active)!.size;
+    });
+    expect(sizes[1]).toBe(sizes[0]);
     expect(p.sparkleScale).toBeLessThan(p.particleScale + 1e-9);
     expect(p.sparkleScale).toBeLessThan(1);
   });
@@ -120,10 +124,6 @@ describe('motion policy', () => {
     expect(p.fadeExpand).toBe(true);
     expect(p.expandDuration).toBe(0.25);
     expect(p.expandDuration).toBeLessThan(VIEW_CONFIG.expandAnimDuration);
-  });
-  it('reduced on -> banner keeps scale 1 regardless of the animated value; off passes it through', () => {
-    expect(bannerScale(motionPolicy(true), 0.85)).toBe(1);
-    expect(bannerScale(motionPolicy(false), 0.85)).toBe(0.85);
   });
   it('expand fade alpha -> old 3x3 goes 1 -> 0.5 -> 0 while new 4x4 goes 0 -> 0.5 -> 1', () => {
     const o = { old: 0, next: 0 };
