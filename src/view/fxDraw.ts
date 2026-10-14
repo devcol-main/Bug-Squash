@@ -1,6 +1,7 @@
 // VFX 그리기. 상태(FxState)를 읽어 Canvas 에 그린다. shadowBlur 없음 (텍스트는 TextCache 스프라이트).
 import { easeOutCubic } from './anim';
 import { FxState, FX_COLORS, GhostMode, PopupStyle, ghostDuration } from './fxState';
+import { bannerScale } from './motionPolicy';
 import { roundRectPath } from './roundRectPath';
 import { TextCache, TextStyle } from './fxText';
 import type { BoardRect } from './layout';
@@ -121,7 +122,7 @@ export function drawTexts(ctx: CanvasRenderingContext2D, fx: FxState, b: BoardRe
     const spr = text.get(TextStyle.Banner, FX.bannerText);
     const fadeIn = Math.min(1, k / FX.bannerFadeIn);
     const fadeOut = Math.min(1, (1 - k) / FX.bannerFadeOut);
-    const s = FX.bannerScaleStart + (1 - FX.bannerScaleStart) * easeOutCubic(k / FX.bannerScaleEnd);
+    const s = bannerScale(fx.policy, FX.bannerScaleStart + (1 - FX.bannerScaleStart) * easeOutCubic(k / FX.bannerScaleEnd));
     ctx.globalAlpha = Math.min(fadeIn, fadeOut);
     const w = spr.w * s;
     const h = spr.h * s;

@@ -9,6 +9,15 @@ export const VIEW_CONFIG = {
   hudHeightRatio: 0.17,
   hudHeightMin: 104,
   hudHeightMax: 150,
+  /**
+   * 보드가 HUD 띠와 아래 여백 사이 남는 세로 공간(slack)에서 차지하는 위치. 0 = HUD 쪽, 1 = 아래쪽.
+   * HUD 띠는 내용보다 넉넉해서 0.5면 위쪽이 비어 보이므로 약간 위로 올린다. 세로가 아주 긴 화면(높이/폭 비율이
+   * tallAspectStart -> tallAspectEnd)에서는 slackBiasTall 까지 선형으로 더 HUD 쪽에 붙인다.
+   */
+  slackBias: 0.42,
+  slackBiasTall: 0.3,
+  tallAspectStart: 1.8,
+  tallAspectEnd: 2.2,
   /** 아래 여백 = 화면 높이 * 비율. */
   bottomMarginRatio: 0.04,
   /** 좌우 여백 = 화면 폭 * 비율 (한쪽). */
@@ -158,8 +167,12 @@ export const VIEW_CONFIG = {
     screenShakeGameOver: { duration: 0.45, amp: 0.026 },
     screenShakeFreqX: 71,
     screenShakeFreqY: 53,
-    /** Reduced motion 훅 값 (적용은 8번에서 연결). */
-    reduced: { shakeScale: 0.25, particleScale: 0.5, instantExpand: true },
+    /**
+     * Reduced motion 정책 값 (motionPolicy.ts가 읽는다).
+     * shakeScale 0 = 화면/칸 흔들림 없음. particleScale = 입자 개수와 크기 배율. sparkleScale = 골든 반짝임 빈도 배율.
+     * fadeExpand = 보드 확장을 칸 이동 대신 짧은 페이드로 (expandFadeDuration초). bannerScaleAnim false = 배너는 페이드만.
+     */
+    reduced: { shakeScale: 0, particleScale: 0.5, sparkleScale: 0.25, fadeExpand: true, expandFadeDuration: 0.25, bannerScaleAnim: false },
   },
 
   // --- 별 (뒤에서 앞 순서). drift: 화면 높이/초 ---

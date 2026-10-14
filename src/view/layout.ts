@@ -24,14 +24,33 @@ export function hudHeight(cssH: number): number {
   return Math.min(c.hudHeightMax, Math.max(c.hudHeightMin, cssH * c.hudHeightRatio));
 }
 
-/** 뷰포트 CSS 크기 -> 보드 정사각형. HUD 아래 ~ 아래 여백 사이 가운데, 가로 가운데. */
+/** 남는 세로 공간에서 보드를 놓는 비율 (0 = HUD 쪽). 세로가 긴 화면일수록 HUD에 가깝게. */
+export function slackBias(cssW: number, cssH: number): number {
+  const c = VIEW_CONFIG;
+  if (!(cssW > 0)) return c.slackBias;
+  const t = Math.min(1, Math.max(0, (cssH / cssW - c.tallAspectStart) / (c.tallAspectEnd - c.tallAspectStart)));
+  return c.slackBias + (c.slackBiasTall - c.slackBias) * t;
+}
+
+/**
+ * HUD 오버레이(ui.css)의 내용이 실제로 차지하는 아래 끝 y (CSS px, safe-area 제외). 띠(hudHeight) 안에 들어가야 한다.
+ * ui.css 값과 맞춰 둔 미러: u = min(폭, 높이*9/16)/100. 라이프 = 3u + 52px + max(16px, 4.4u), 배율 = 16.4u + 4.4u*1.1.
+ */
+export function hudContentBottom(cssW: number, cssH: number): number {
+  const u = Math.min(cssW, cssH * (9 / 16)) / 100;
+  const lives = 3 * u + 52 + Math.max(16, 4.4 * u);
+  const combo = 16.4 * u + 4.4 * u * 1.1;
+  return Math.max(lives, combo);
+}
+
+/** 뷰포트 CSS 크기 -> 보드 정사각형. 가로 가운데, 세로는 HUD 아래 ~ 아래 여백 사이에서 slackBias 위치. */
 export function computeBoardRect(cssW: number, cssH: number): BoardRect {
   const c = VIEW_CONFIG;
   const top = hudHeight(cssH);
   const availH = Math.max(0, cssH - top - cssH * c.bottomMarginRatio);
   const availW = Math.max(0, cssW * (1 - 2 * c.sideMarginRatio));
   const size = Math.min(availW, availH);
-  return { x: (cssW - size) / 2, y: top + (availH - size) / 2, size };
+  return { x: (cssW - size) / 2, y: top + (availH - size) * slackBias(cssW, cssH), size };
 }
 
 /** gridSize 균등 분할의 칸 index 전체 영역. out에 기록해 할당을 피한다. */

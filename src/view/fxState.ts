@@ -3,6 +3,7 @@
 import type { BugSquashEvent, ObjectKind } from '../core/BugSquashLogic';
 import { DEFAULT_CONFIG } from '../core/config';
 import type { Rng } from '../core/rng';
+import { motionPolicy, type MotionPolicy } from './motionPolicy';
 import { Pool } from './pool';
 import { shakeOffset, type Offset2 } from './shake';
 import { SpriteId } from './sprites';
@@ -78,11 +79,12 @@ export class FxState {
     this.gridSize = gridSize;
   }
 
-  /** Reduced motion 훅. 실제 연출 축소는 8번에서 이 값을 읽어 적용한다. 기본 off. */
+  /** Reduced motion 설정. 정책 값은 motionPolicy. 기본 off. */
   setReducedMotion(on: boolean): void { this.reducedMotion = on; }
   get isReducedMotion(): boolean { return this.reducedMotion; }
-  get shakeScale(): number { return this.reducedMotion ? FX.reduced.shakeScale : 1; }
-  get particleScale(): number { return this.reducedMotion ? FX.reduced.particleScale : 1; }
+  get policy(): Readonly<MotionPolicy> { return motionPolicy(this.reducedMotion); }
+  get shakeScale(): number { return this.policy.shakeScale; }
+  get particleScale(): number { return this.policy.particleScale; }
 
   reset(gridSize: number = this.gridSize): void {
     this.gridSize = gridSize;
@@ -172,7 +174,7 @@ export class FxState {
 
   /** 골든이 화면에 있는 동안 매 프레임 호출. 적은 수의 반짝임 입자를 낸다. */
   sparkle(u: number, v: number, frac: number, dt: number): void {
-    this.sparkleAcc += dt * FX.sparkleRate * this.particleScale;
+    this.sparkleAcc += dt * FX.sparkleRate * this.policy.sparkleScale;
     const rng = this.rng;
     while (this.sparkleAcc >= 1) {
       this.sparkleAcc -= 1;

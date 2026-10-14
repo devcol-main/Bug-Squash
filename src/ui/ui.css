@@ -46,13 +46,13 @@
   font-size: calc(var(--u) * 3.4); line-height: 1.1; letter-spacing: 0.04em; color: #ff7ad9; white-space: nowrap;
 }
 .score {
-  position: absolute; left: 0; right: 0; top: calc(var(--u) * 6.4);
+  position: absolute; left: 0; right: 0; top: calc(var(--u) * 6.4 + env(safe-area-inset-top, 0px));
   text-align: center; font-size: calc(var(--u) * 9.5); line-height: 1;
   text-shadow: 0 0 calc(var(--u) * 1.2) #ff3cc8, 0 0 calc(var(--u) * 3.5) #ff3cc8;
 }
 /* 콤보 배율: ×1이면 투명(자리 유지). 배율이 오를 때 .pop 으로 크게 튀었다 돌아온다. */
 .combo {
-  position: absolute; left: 0; right: 0; top: calc(var(--u) * 16.4);
+  position: absolute; left: 0; right: 0; top: calc(var(--u) * 16.4 + env(safe-area-inset-top, 0px));
   text-align: center; font-size: calc(var(--u) * 4.4); line-height: 1.1; color: #fff; opacity: 0; transition: opacity 0.12s;
   text-shadow: 0 0 calc(var(--u) * 1) #33e1ff, 0 0 calc(var(--u) * 3) #33e1ff;
 }
@@ -67,7 +67,7 @@
 
 /* BEST: 로고 아래 왼쪽 (점수 영역과 겹치지 않는다) */
 .hud-best {
-  position: absolute; left: calc(var(--u) * 4 + env(safe-area-inset-left, 0px)); top: calc(var(--u) * 14.5);
+  position: absolute; left: calc(var(--u) * 4 + env(safe-area-inset-left, 0px)); top: calc(var(--u) * 14.5 + env(safe-area-inset-top, 0px));
   font-size: calc(var(--u) * 3); font-weight: 600; color: #c9a8ff; white-space: nowrap;
 }
 .hud-best[hidden] { display: none; }

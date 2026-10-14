@@ -34,6 +34,9 @@ export class PointerInput {
     this.gridSize = gridSize;
   }
 
+  /** 쌓인 입력을 모두 버린다 (일시정지/복귀 때). */
+  clear(): void { this.queue.clear(); }
+
   setEnabled(v: boolean): void { this.queue.setEnabled(v); }
   get enabled(): boolean { return this.queue.enabled; }
 

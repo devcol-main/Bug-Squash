@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { expandAnimT, popScale, smoothstep01 } from '../src/view/anim';
 import { drawnCellInnerHalf, objectBoundsRatio, type BoundsKind } from '../src/view/objectBounds';
 import { VIEW_CONFIG } from '../src/view/viewConfig';
-import { cellBox, computeBoardRect, expandCellBox, hudHeight, newCellBox } from '../src/view/layout';
+import { cellBox, computeBoardRect, expandCellBox, hudContentBottom, hudHeight, newCellBox, slackBias } from '../src/view/layout';
 
-const SIZES: [number, number][] = [[375, 667], [375, 812], [1280, 720], [800, 600], [360, 640]];
+const SIZES: [number, number][] = [[375, 667], [375, 812], [1280, 720], [800, 600], [360, 640], [800, 400], [320, 568]];
 
 describe('computeBoardRect', () => {
   for (const [w, h] of SIZES) {
@@ -125,6 +125,44 @@ describe('layout rules', () => {
     const b = computeBoardRect(800, 400);
     expect(b.y).toBeGreaterThanOrEqual(hudHeight(400) - 1e-9);
     expect(b.y + b.size).toBeLessThanOrEqual(400);
+  });
+  for (const [w, h] of SIZES) {
+    it(`${w}x${h} -> HUD content (score, multiplier, lives, Sound) ends above the board`, () => {
+      expect(hudContentBottom(w, h)).toBeLessThanOrEqual(hudHeight(h));
+      expect(hudContentBottom(w, h)).toBeLessThanOrEqual(computeBoardRect(w, h).y);
+    });
+  }
+  it('375x667 portrait -> board sits above the vertical center of the free space (closer to the HUD)', () => {
+    const b = computeBoardRect(375, 667);
+    const top = hudHeight(667);
+    const slack = 667 - top - 667 * VIEW_CONFIG.bottomMarginRatio - b.size;
+    expect(slack).toBeGreaterThan(0);
+    expect(b.y - top).toBeCloseTo(slack * VIEW_CONFIG.slackBias);
+    expect(b.y - top).toBeLessThan(slack / 2);
+  });
+  it('very tall 375x850 -> bias saturates at slackBiasTall, closer to the HUD than on 375x812 and 375x667', () => {
+    const tall = computeBoardRect(375, 850);
+    const top = hudHeight(850);
+    const slack = 850 - top - 850 * VIEW_CONFIG.bottomMarginRatio - tall.size;
+    expect((tall.y - top) / slack).toBeCloseTo(VIEW_CONFIG.slackBiasTall);
+    expect(slackBias(375, 812)).toBeLessThan(slackBias(375, 667));
+    expect(slackBias(375, 850)).toBeLessThan(slackBias(375, 812));
+  });
+  it('landscape 1280x720 -> no free vertical space, so the bias changes nothing', () => {
+    const b = computeBoardRect(1280, 720);
+    expect(b.y).toBeCloseTo(hudHeight(720));
+  });
+  it('320x568 small phone -> board is 94% of the width and fits below the HUD', () => {
+    const b = computeBoardRect(320, 568);
+    expect(b.size).toBeCloseTo(320 * (1 - 2 * VIEW_CONFIG.sideMarginRatio));
+    expect(b.y + b.size).toBeLessThanOrEqual(568 - 568 * VIEW_CONFIG.bottomMarginRatio + 1e-9);
+  });
+  it('slackBias -> stays between the tall and base values for any aspect ratio', () => {
+    for (const [w, h] of [[100, 100], [375, 667], [375, 900], [100, 1000], [0, 100]] as const) {
+      const v = slackBias(w, h);
+      expect(v).toBeGreaterThanOrEqual(VIEW_CONFIG.slackBiasTall - 1e-9);
+      expect(v).toBeLessThanOrEqual(VIEW_CONFIG.slackBias + 1e-9);
+    }
   });
   it('50x50 screen -> HUD takes everything so the board size is exactly 0', () => {
     expect(computeBoardRect(50, 50).size).toBe(0);

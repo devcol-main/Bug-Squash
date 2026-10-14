@@ -3,6 +3,7 @@ import { createRng } from '../core/rng';
 import type { BugSquashEvent, BugSquashLogic } from '../core/BugSquashLogic';
 import { expandAnimT, gridFlickerAlpha, popScale, smoothstep01 } from './anim';
 import { cellBox, computeBoardRect, expandCellBox, newCellBox, type BoardRect } from './layout';
+import { expandFadeAlphas } from './motionPolicy';
 import { shakeAmplitude } from './shake';
 import { SpriteId, Sprites } from './sprites';
 import { drawFlashes, drawGhosts, drawParticlesAndRings, drawTexts } from './fxDraw';
@@ -19,6 +20,7 @@ export class BugSquashRenderer {
   private readonly fx = new FxState(createRng(VIEW_CONFIG.starSeed ^ 0x9e3779b9));
   private readonly text = new TextCache();
   private readonly shake = { x: 0, y: 0 };
+  private readonly fade = { old: 1, next: 1 };
   private gradient: CanvasGradient | null = null;
   private grid: Path2D | null = null;
   private cssW = 0;
@@ -68,7 +70,7 @@ export class BugSquashRenderer {
   /** 새 게임 시작 시 남은 연출을 비우고 시작 그리드 크기를 맞춘다. */
   resetFx(logic: BugSquashLogic): void { this.fx.reset(logic.boardSize); }
 
-  /** Reduced motion 훅 (실제 축소 동작은 8번). */
+  /** Reduced motion: 정책은 motionPolicy (흔들림 0, 입자 축소, 확장은 페이드). */
   setReducedMotion(on: boolean): void { this.fx.setReducedMotion(on); }
 
   /** 폰트 로드 후 호출: 글로우 텍스트 캐시를 다시 만들게 한다. */
@@ -134,12 +136,27 @@ export class BugSquashRenderer {
     // 칸 + 오브젝트
     const grid = logic.boardSize;
     const expanding = logic.isExpanding;
-    const prog = smoothstep01(expandAnimT(logic.expandProgress, DEFAULT_CONFIG.expandPause, c.expandAnimDuration));
+    const policy = fx.policy;
+    const prog = smoothstep01(expandAnimT(logic.expandProgress, DEFAULT_CONFIG.expandPause, policy.expandDuration));
     const n = logic.cellCount;
     const box = this.box;
     const sp = this.sprites;
+    const fadeExpand = expanding && policy.fadeExpand;
+    if (fadeExpand) {
+      // 3x3가 사라지고 4x4가 나타난다 (칸 이동 없음). 확장 중에는 오브젝트가 없다(core가 비움).
+      const a = expandFadeAlphas(prog, this.fade);
+      const small = c.smallGrid;
+      for (let j = 0; j < small * small; j++) {
+        cellBox(this._board, small, j, box);
+        ctx.globalAlpha = a.old;
+        ctx.drawImage(sp.cellNormal!, box.cx - box.size / 2, box.cy - box.size / 2, box.size, box.size);
+      }
+    }
     for (let i = 0; i < n; i++) {
-      if (expanding) expandCellBox(this._board, c.smallGrid, grid, i, prog, box);
+      if (fadeExpand) {
+        cellBox(this._board, grid, i, box);
+        box.alpha = this.fade.next;
+      } else if (expanding) expandCellBox(this._board, c.smallGrid, grid, i, prog, box);
       else cellBox(this._board, grid, i, box);
       const cell = logic.getCell(i);
       const occupied = cell.kind !== null;
@@ -162,7 +179,7 @@ export class BugSquashRenderer {
       }
       let ox = 0;
       const sh = fx.cellShake[i]!;
-      if (sh >= 0) ox = shakeAmplitude(sh, c.fx.hitShakeDuration, box.size * c.fx.hitShakeAmp) * Math.sin(sh * c.fx.hitShakeFreq);
+      if (sh >= 0) ox = shakeAmplitude(sh, c.fx.hitShakeDuration, box.size * c.fx.hitShakeAmp * policy.shakeScale) * Math.sin(sh * c.fx.hitShakeFreq);
       if (cell.kind === 'golden') fx.sparkle((box.cx - bd.x) / bd.size, (box.cy - bd.y) / bd.size, box.size / bd.size, dt);
       const d = box.size * s * (1 + 2 * c.objectPad);
       ctx.drawImage(sp.objects[id]!, box.cx + ox - d / 2, box.cy - d / 2, d, d);

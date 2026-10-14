@@ -17,6 +17,8 @@ import { ConfirmGate, effectiveReducedMotion, hudBest, reducedMotionStore, reset
 import { BestScore, NicknameStore, browserStorage } from './ui/records';
 import { BugSquashUi } from './ui/BugSquashUi';
 import { FrameClock } from './ui/frameClock';
+import { PauseController } from './ui/pause';
+import { watchDpr } from './ui/dprWatcher';
 import { waitForFont } from './ui/fonts';
 import { UI_CONFIG } from './ui/uiConfig';
 import './ui/ui.css';
@@ -346,25 +348,32 @@ if (canvas instanceof HTMLCanvasElement) {
     renderer.invalidateTextCache();
   });
 
-  // 일시정지: 탭이 숨겨지면 dt를 0으로 두고(게임/연출/입력 잠금 시간 모두 정지) 오디오를 멈춘다.
+  // 일시정지: 탭이 숨겨지면 명시적 paused 플래그를 세운다. 프레임 루프는 paused인 동안 update/render를 건너뛰어
+  // 시간(노출, 난이도, 게임 오버 입력 잠금)이 흐르지 않는다. 복귀 첫 프레임은 dt = 0, 쌓인 입력은 버린다.
   const clock = new FrameClock(UI_CONFIG.maxFrameDt);
-  const setPaused = (paused: boolean): void => {
-    if (paused === clock.isPaused) return;
-    if (paused) {
-      clock.pause();
-      audio.suspend();
-    } else {
-      clock.resume();
-      audio.resume();
-    }
-  };
-  document.addEventListener('visibilitychange', () => setPaused(document.hidden));
-  window.addEventListener('pagehide', () => setPaused(true));
-  window.addEventListener('pageshow', () => setPaused(document.hidden));
-  if (document.hidden) setPaused(true);
+  const pause = new PauseController(clock, {
+    clearInput: () => input.clear(),
+    suspendAudio: () => audio.suspend(),
+    resumeAudio: () => audio.resume(),
+  });
+  document.addEventListener('visibilitychange', () => pause.set(document.hidden));
+  window.addEventListener('pagehide', () => pause.set(true));
+  window.addEventListener('pageshow', () => pause.set(document.hidden));
+  if (document.hidden) pause.set(true);
+
+  // 모니터를 옮겨 DPR만 바뀐 경우에도 리사이즈 경로를 다시 탄다.
+  watchDpr(
+    typeof window.matchMedia === 'function' ? (q) => window.matchMedia(q) : null,
+    () => window.devicePixelRatio || 1,
+    markResize,
+  );
 
   const frame = (now: number): void => {
     const dt = clock.tick(now);
+    if (pause.paused) {
+      requestAnimationFrame(frame);
+      return;
+    }
     if (resizeDirty) {
       resizeDirty = false;
       renderer.resize();
