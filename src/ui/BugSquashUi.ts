@@ -213,7 +213,7 @@ export class BugSquashUi {
   refreshAfterReset(): void {
     this.best.textContent = 'BEST 0';
     this.newBest.hidden = true;
-    this.input.value = '';
+    // 닉네임 입력칸은 공통 프로필 값이므로 Reset이 건드리지 않는다.
   }
 
   private clearBoard(): void {

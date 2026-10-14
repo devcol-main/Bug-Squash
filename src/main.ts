@@ -1,10 +1,4 @@
-import {
-  LocalLeaderboardService,
-  normalizeNickname,
-  MAX_NICKNAME_LENGTH,
-  type LeaderboardEntry,
-  type LeaderboardService,
-} from '../../../shared/leaderboard';
+import { type LeaderboardEntry, type LeaderboardService } from '../../../shared/leaderboard';
 import { BugSquashLogic, type EventBuffer } from './core/BugSquashLogic';
 import type { BugSquashConfig } from './core/config';
 import { createRng } from './core/rng';
@@ -14,7 +8,8 @@ import { setVibrationEnabled, vibrateFeatureTap, vibrateGameOver, vibrateMiss } 
 import { BugSquashRenderer } from './view/BugSquashRenderer';
 import { GameFlow } from './ui/flow';
 import { ConfirmGate, effectiveReducedMotion, hudBest, reducedMotionStore, resetUserData, vibrationStore } from './ui/options';
-import { BestScore, NicknameStore, browserStorage } from './ui/records';
+import { BestScore, browserStorage } from './ui/records';
+import { createBugSquashLeaderboard, createPlayerProfile, makeStats, nicknameToSubmit, type BugSquashStats } from './ui/leaderboard';
 import { BugSquashUi } from './ui/BugSquashUi';
 import { FrameClock } from './ui/frameClock';
 import { PauseController } from './ui/pause';
@@ -63,8 +58,8 @@ if (canvas instanceof HTMLCanvasElement) {
   const flow = new GameFlow(UI_CONFIG.gameOverInputLockSec);
   const ui = new BugSquashUi(UI_CONFIG.leaderboardSize);
   const best = new BestScore(storage, UI_CONFIG.bestKey);
-  const nickname = new NicknameStore(storage, UI_CONFIG.nicknameKey, MAX_NICKNAME_LENGTH);
-  let leaderboard: LeaderboardService = new LocalLeaderboardService(UI_CONFIG.leaderboardKey);
+  const profile = createPlayerProfile(storage);
+  let leaderboard: LeaderboardService<BugSquashStats> = createBugSquashLeaderboard();
   ui.setMuted(audio.isMuted());
   ui.syncAudio(audio.getSettings());
   ui.setVibration(vibrationOn);
@@ -86,7 +81,7 @@ if (canvas instanceof HTMLCanvasElement) {
   /** 이번 판의 결과 (게임 오버 이벤트에서 채움). 제출은 flow.claimSubmit()으로 판당 1회. */
   const result = { score: 0, bugsCaught: 0, maxCombo: 0, time: 0 };
 
-  const refreshBoard = (mine: LeaderboardEntry | null): void => {
+  const refreshBoard = (mine: LeaderboardEntry<BugSquashStats> | null): void => {
     const round = flow.round;
     leaderboard.getTop(UI_CONFIG.leaderboardSize).then(
       (entries) => {
@@ -99,11 +94,15 @@ if (canvas instanceof HTMLCanvasElement) {
 
   const submitScore = (): void => {
     if (!flow.claimSubmit()) return;
-    const nick = normalizeNickname(ui.input.value);
-    nickname.save(nick);
-    // LeaderboardEntry의 보조 값은 floors(Stack Up 전용)/maxCombo뿐이라 bugsCaught, time은 담을 곳이 없다.
-    // 인터페이스는 바꾸지 않고 maxCombo만 기록한다 (floors = 0).
-    const entry: LeaderboardEntry = { nickname: nick, score: result.score, floors: 0, maxCombo: result.maxCombo, ts: Date.now() };
+    const nick = nicknameToSubmit(ui.input.value, profile.nickname);
+    profile.setNickname(nick);
+    const entry: LeaderboardEntry<BugSquashStats> = {
+      playerId: profile.playerId,
+      nickname: nick,
+      score: result.score,
+      stats: makeStats(result),
+      ts: Date.now(),
+    };
     ui.hideNickForm();
     leaderboard.submit(entry).then(
       () => refreshBoard(entry),
@@ -120,7 +119,7 @@ if (canvas instanceof HTMLCanvasElement) {
     result.time = logic.time;
     const isNewBest = best.submit(result.score);
     ui.setPhase('gameOver');
-    ui.showGameOver({ score: result.score, best: best.value, isNewBest }, nickname.value);
+    ui.showGameOver({ score: result.score, best: best.value, isNewBest }, profile.nickname);
     ui.setTitleBest(best.value);
     refreshBoard(null);
   };
@@ -307,8 +306,8 @@ if (canvas instanceof HTMLCanvasElement) {
       return;
     }
     cancelReset();
-    resetUserData({ best, nickname, storage, leaderboardKey: UI_CONFIG.leaderboardKey });
-    leaderboard = new LocalLeaderboardService(UI_CONFIG.leaderboardKey); // 메모리에 남은 기록도 비운다
+    resetUserData({ best, storage, leaderboardKey: UI_CONFIG.leaderboardKey });
+    leaderboard = createBugSquashLeaderboard(); // 메모리에 남은 기록도 비운다
     ui.setTitleBest(best.value);
     ui.refreshAfterReset();
     if (flow.phase === 'gameOver') ui.renderBoard([], null);

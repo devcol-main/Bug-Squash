@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BestScore, NicknameStore, type StorageLike } from '../src/ui/records';
+import { BestScore, type StorageLike } from '../src/ui/records';
 import { UI_CONFIG } from '../src/ui/uiConfig';
 
 function memStorage(init: Record<string, string> = {}): StorageLike & { data: Record<string, string> } {
@@ -65,30 +65,9 @@ describe('BestScore', () => {
   });
 });
 
-describe('NicknameStore', () => {
-  it('restores the last nickname truncated to the max length', () => {
-    expect(new NicknameStore(memStorage({ n: 'abcdefghijklmnop' }), 'n', 12).value).toBe('abcdefghijkl');
-  });
-
-  it('save persists the nickname', () => {
-    const s = memStorage();
-    const n = new NicknameStore(s, 'n', 12);
-    n.save('Neo');
-    expect(s.data.n).toBe('Neo');
-    expect(n.value).toBe('Neo');
-  });
-
-  it('throwing storage does not break save or load', () => {
-    const n = new NicknameStore(broken, 'n', 12);
-    expect(n.value).toBe('');
-    n.save('Neo');
-    expect(n.value).toBe('Neo');
-  });
-});
-
 describe('storage keys', () => {
   it('every bug-squash UI key uses the bugSquash. prefix and none collides with Stack Up keys', () => {
-    const keys = [UI_CONFIG.bestKey, UI_CONFIG.nicknameKey, UI_CONFIG.reducedMotionKey, UI_CONFIG.vibrationKey, UI_CONFIG.leaderboardKey];
+    const keys = [UI_CONFIG.bestKey, UI_CONFIG.legacyNicknameKey, UI_CONFIG.reducedMotionKey, UI_CONFIG.vibrationKey, UI_CONFIG.leaderboardKey];
     for (const k of keys) {
       expect(k.startsWith('bugSquash.')).toBe(true);
       expect(k.startsWith('stackup.')).toBe(false);
@@ -96,10 +75,9 @@ describe('storage keys', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('best score and nickname are saved under the bug-squash keys only', () => {
+  it('best score is saved under the bug-squash best key only', () => {
     const s = memStorage();
     new BestScore(s, UI_CONFIG.bestKey).submit(10);
-    new NicknameStore(s, UI_CONFIG.nicknameKey, 12).save('Neo');
-    expect(Object.keys(s.data).sort()).toEqual([UI_CONFIG.bestKey, UI_CONFIG.nicknameKey].sort());
+    expect(Object.keys(s.data)).toEqual([UI_CONFIG.bestKey]);
   });
 });

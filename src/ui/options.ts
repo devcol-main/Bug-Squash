@@ -1,5 +1,5 @@
 // 옵션/표시 관련 순수 로직. DOM 없이 테스트 가능. (Stack Up options를 복사해 Vibration 등을 추가)
-import type { BestScore, NicknameStore, StorageLike } from './records';
+import type { BestScore, StorageLike } from './records';
 
 /** OS 설정과 수동 설정 중 하나라도 켜져 있으면 축소 모드. */
 export function effectiveReducedMotion(os: boolean, manual: boolean): boolean {
@@ -44,19 +44,17 @@ export const vibrationStore = (storage: StorageLike | null, key: string): BoolSt
 
 export interface ResetTargets {
   best: BestScore;
-  nickname: NicknameStore;
   storage: StorageLike | null;
-  /** 리더보드 Mock이 저장된 키. 빈 목록('[]')으로 덮어쓴다. */
+  /** 리더보드가 저장된 키. 빈 목록('[]')으로 덮어쓴다. */
   leaderboardKey: string;
 }
 
 /**
- * 최고 기록, 닉네임, 리더보드 Mock을 지운다. 넘겨받은 bug-squash 키만 건드리므로
- * Stack Up 데이터와 오디오/옵션 설정은 그대로다.
+ * 최고 기록과 리더보드만 지운다. 넘겨받은 bug-squash 키만 건드리므로
+ * 공통 플레이어 프로필(playerId, 닉네임), Stack Up 데이터, 오디오/옵션 설정은 그대로다.
  */
 export function resetUserData(t: ResetTargets): void {
   t.best.reset();
-  t.nickname.clear();
   try {
     t.storage?.setItem(t.leaderboardKey, '[]');
   } catch {

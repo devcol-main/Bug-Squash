@@ -13,7 +13,8 @@ export const UI_CONFIG = {
   /** document.fonts.load에 넘기는 폰트 스펙. */
   fontSpec: '800 16px Geist',
   bestKey: 'bugSquash.best',
-  nicknameKey: 'bugSquash.nickname',
+  /** 공통 프로필로 옮기기 전의 옛 닉네임 키. 가져오기만 하고 쓰지 않는다. */
+  legacyNicknameKey: 'bugSquash.nickname',
   reducedMotionKey: 'bugSquash.reducedMotion',
   vibrationKey: 'bugSquash.vibration',
   leaderboardKey: 'bugSquash.leaderboard',

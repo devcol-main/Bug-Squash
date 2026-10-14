@@ -1,4 +1,4 @@
-// 최고 기록 / 마지막 닉네임 저장. 스토리지는 주입하고, 접근 실패는 모두 삼킨다.
+// 최고 기록 저장. 스토리지는 주입하고, 접근 실패는 모두 삼킨다.
 export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -55,32 +55,5 @@ export class BestScore {
   reset(): void {
     this.best = 0;
     write(this.storage, this.key, '0');
-  }
-}
-
-export class NicknameStore {
-  private nick: string;
-
-  constructor(
-    private readonly storage: StorageLike | null,
-    private readonly key: string,
-    private readonly maxLength: number,
-  ) {
-    this.nick = (read(storage, key) ?? '').slice(0, maxLength);
-  }
-
-  get value(): string {
-    return this.nick;
-  }
-
-  save(nick: string): void {
-    this.nick = nick.slice(0, this.maxLength);
-    write(this.storage, this.key, this.nick);
-  }
-
-  /** 저장된 닉네임을 지운다. */
-  clear(): void {
-    this.nick = '';
-    write(this.storage, this.key, '');
   }
 }
