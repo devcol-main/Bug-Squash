@@ -13,6 +13,7 @@ import { TextCache } from './fxText';
 import { KeyHintCache, shouldDrawKeyHint } from './keyHints';
 import { CodeLog, codeLogRows, codeLogUnitWidth } from './codeLog';
 import { buildCrtOverlay } from './crtOverlay';
+import { layerSpan, newSnappedSquare, snapSquareEven } from './pixelSnap';
 import { VIEW_CONFIG } from './viewConfig';
 
 export class BugSquashRenderer {
@@ -20,6 +21,7 @@ export class BugSquashRenderer {
   private readonly sprites = new Sprites();
   private readonly codeLog = new CodeLog(createRng(VIEW_CONFIG.viewSeed ^ 0x51ed270b));
   private readonly box = newCellBox();
+  private readonly goldenQ = newSnappedSquare();
   private readonly fx = new FxState(createRng(VIEW_CONFIG.viewSeed ^ 0x9e3779b9));
   private readonly text = new TextCache();
   private readonly keyHints = new KeyHintCache();
@@ -86,11 +88,13 @@ export class BugSquashRenderer {
   private buildLayer(): void {
     const b = this._board;
     const pad = (b.size / DEFAULT_CONFIG.smallBoardSize) * VIEW_CONFIG.fx.layerPad;
-    this.layerY0 = Math.max(0, Math.floor(b.y - pad));
-    this.layerY1 = Math.min(this.cssH, Math.ceil(b.y + b.size + pad));
+    // 시작 y 를 디바이스 px 격자에 맞춘다 (DPR 1.5 에서 합성이 반 픽셀 어긋나지 않게). 높이는 정수 디바이스 px.
+    const span = layerSpan(b.y - pad, b.y + b.size + pad, this.cssH, this.dpr);
+    this.layerY0 = span.y0;
+    this.layerY1 = span.y1;
     const c = document.createElement('canvas');
     c.width = this.canvas.width;
-    c.height = Math.max(1, Math.round((this.layerY1 - this.layerY0) * this.dpr));
+    c.height = span.heightPx;
     const g = c.getContext('2d');
     this.layer = g ? c : null;
     this.layerCtx = g;
@@ -261,13 +265,21 @@ export class BugSquashRenderer {
       const glitching = gl >= 0 && policy.glitch && !expanding;
       const natural = s === 1 && !expanding;
       const d = natural ? sp.surfPx / dpr : box.size * s * (1 + 2 * c.objectPad);
-      const left = natural ? snap(box.cx - d / 2, dpr) : box.cx - d / 2;
-      const top = natural ? snap(box.cy - d / 2, dpr) : box.cy - d / 2;
-      if (glitching) this.drawGlitched(g, sp.objects[id]!, sp.surfPx, left, top, d, i, gl, box.size);
-      else g.drawImage(sp.objects[id]!, left, top, d, d);
+      let left = natural ? snap(box.cx - d / 2, dpr) : box.cx - d / 2;
+      let top = natural ? snap(box.cy - d / 2, dpr) : box.cy - d / 2;
+      let dd = d;
+      if (cell.kind === 'golden' && !expanding) {
+        // 맥동 중에도 짝수 정수 디바이스 px 크기 + 격자 위치로 그린다 (흐려짐 방지).
+        // 절충: 짝수 반올림 때문에 스프라이트 surfPx 가 홀수면 s=1 이어도 원래 크기로 그려지지 않고,
+        // 중심이 일반 버그와 최대 0.5 디바이스 px 다를 수 있다. 선명도를 위해 의도한 것이다.
+        const q = snapSquareEven(box.cx, box.cy, d, dpr, this.goldenQ);
+        left = q.left; top = q.top; dd = q.size;
+      }
+      if (glitching) this.drawGlitched(g, sp.objects[id]!, sp.surfPx, left, top, dd, i, gl, box.size);
+      else g.drawImage(sp.objects[id]!, left, top, dd, dd);
       if (cell.kind === 'golden' && (this.time % c.goldenCursor.period) < c.goldenCursor.period * c.goldenCursor.onRatio) {
         // 깜박이는 터미널 커서 `_`: 버그 바로 아래, 스프라이트 블록 그리드에 스냅
-        const k = d / sp.surfPx;
+        const k = dd / sp.surfPx;
         const cur = sp.cursor;
         g.fillStyle = c.goldenCursor.color;
         g.fillRect(left + cur.x * k, top + cur.y * k, cur.w * k, cur.h * k);

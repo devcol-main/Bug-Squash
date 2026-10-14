@@ -1,5 +1,6 @@
 // CRT 오버레이 (스캔라인 + 비네팅). 리사이즈/DPR 변경 때 오프스크린에 한 번 그리고 매 프레임 drawImage 로 덮는다.
 // 스캔라인은 디바이스 픽셀 기준(주기 round(2*dpr))이라 DPR 1.5 같은 비정수 배율에서도 무아레가 생기지 않는다.
+import { scanlineParams } from './pixelSnap';
 import { VIEW_CONFIG } from './viewConfig';
 
 /** bakeDark: true면 기본 밝기 감소(flickerAmp)를 오버레이에 미리 굽는다 (깜박임을 끈 모드에서 전체 화면 fillRect 생략용). */
@@ -21,9 +22,9 @@ export function buildCrtOverlay(cssW: number, cssH: number, dpr: number, bakeDar
   g.fillStyle = grad;
   g.fillRect(0, 0, s.width, s.height);
   // 가로 스캔라인 (디바이스 px)
-  const period = Math.max(2, Math.round(c.scanPeriod * dpr));
-  const thick = Math.max(1, Math.round(c.scanThickness * dpr));
-  g.fillStyle = `rgba(0,0,0,${c.scanAlpha})`;
+  // 덮인 비율이 DPR 마다 다르므로(1.5 에서 2/3) 알파를 보정해 평균 어둡기를 DPR 1 과 같게 유지한다.
+  const { period, thick, alpha } = scanlineParams(dpr, c.scanPeriod, c.scanThickness, c.scanAlpha);
+  g.fillStyle = `rgba(0,0,0,${alpha})`;
   for (let y = 0; y < s.height; y += period) g.fillRect(0, y, s.width, thick);
   return s;
 }

@@ -25,6 +25,8 @@
   /* 열 바깥 좌우 여백과, 그 여백이 흡수하지 못한 오른쪽 safe-area(노치). 오른쪽 버튼/라이프의 오프셋에 더한다 */
   --gutter: max(0px, calc((100vw - var(--u) * 100) / 2));
   --safe-r: max(0px, calc(env(safe-area-inset-right, 0px) - var(--gutter)));
+  /* 왼쪽도 같은 방식: 열 바깥 여백이 흡수하지 못한 왼쪽 safe-area만 로고/BEST 오프셋에 더한다 */
+  --safe-l: max(0px, calc(env(safe-area-inset-left, 0px) - var(--gutter)));
   --below-mute: 52px; /* Sound 버튼 높이(44px) + 간격. 옵션 버튼과 라이프가 함께 쓴다 */
   position: fixed;
   overscroll-behavior: none;
@@ -52,7 +54,7 @@
    주의: HUD 요소의 크기/위치를 바꾸면 src/view/layout.ts 의 hudContentBottom(미러)도 함께 수정할 것. */
 /* 좌상단 브랜드: DevCol 로고(모든 화면). 입력은 가로채지 않는다. */
 .brand {
-  position: absolute; left: calc(var(--u) * 4 + env(safe-area-inset-left, 0px)); top: calc(var(--u) * 3 + env(safe-area-inset-top, 0px));
+  position: absolute; left: calc(var(--u) * 4 + var(--safe-l)); top: calc(var(--u) * 3 + env(safe-area-inset-top, 0px));
   display: flex; align-items: center; pointer-events: none; z-index: 1;
 }
 /* 플레이 중 BUG SQUASH 문구: 열 가운데, 점수 바로 위. 장식이라 aria-hidden.
@@ -84,7 +86,7 @@
 
 /* BEST: 로고 아래 왼쪽 (점수 영역과 겹치지 않는다) */
 .hud-best {
-  position: absolute; left: calc(var(--u) * 4 + env(safe-area-inset-left, 0px)); top: calc(var(--u) * 14.5 + env(safe-area-inset-top, 0px));
+  position: absolute; left: calc(var(--u) * 4 + var(--safe-l)); top: calc(var(--u) * 14.5 + env(safe-area-inset-top, 0px));
   font-size: calc(var(--u) * 3); font-weight: 600; color: var(--term-amber); white-space: nowrap;
 }
 .hud-best[hidden] { display: none; }
@@ -104,11 +106,11 @@
 .life-fill { position: absolute; inset: 0; background: var(--term-green); opacity: 0; box-shadow: 0 0 4px var(--term-glow); }
 .life.full .life-fill { opacity: 1; }
 .shard { position: absolute; width: 28%; height: 28%; background: var(--term-green); opacity: 0; }
-/* 잃는 순간: 채움이 사라지고 작은 사각 조각 4개가 흩어지며 페이드 */
+/* 잃는 순간: 채움이 사라지고 작은 사각 조각 4개가 옆/아래로 흩어지며 페이드 (위쪽 성분 없음: 바로 위 Sound 버튼을 덮지 않게) */
 .life.break .life-fill { animation: life-gone 0.4s steps(4, end); }
 .life.break .shard { animation: shard-fly 0.45s steps(5, end); }
-.life.break .s1 { left: 10%; top: 10%; --dx: -300%; --dy: -300%; }
-.life.break .s2 { right: 10%; top: 10%; --dx: 300%; --dy: -260%; }
+.life.break .s1 { left: 10%; top: 10%; --dx: -300%; --dy: 40%; }
+.life.break .s2 { right: 10%; top: 10%; --dx: 300%; --dy: 40%; }
 .life.break .s3 { left: 10%; bottom: 10%; --dx: -260%; --dy: 300%; }
 .life.break .s4 { right: 10%; bottom: 10%; --dx: 300%; --dy: 260%; }
 @keyframes life-gone { 0% { opacity: 1; } 100% { opacity: 0; } }
