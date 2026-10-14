@@ -1,35 +1,57 @@
-const MAX_DPR = 2;
-const BG_TOP = '#07020F';
-const BG_BOTTOM = '#1D0634';
+import { BugSquashLogic } from './core/BugSquashLogic';
+import type { BugSquashConfig } from './core/config';
+import { createRng } from './core/rng';
+import { BugSquashRenderer } from './view/BugSquashRenderer';
+
+declare global {
+  interface Window {
+    /** 개발 모드 전용 (브라우저 확인용). 프로덕션 번들에는 없다. */
+    __bugSquash?: {
+      logic(): BugSquashLogic;
+      restart(seed?: number, overrides?: Partial<BugSquashConfig>): BugSquashLogic;
+    };
+  }
+}
+
+const MAX_DT = 0.1;
+// TEMP: 7번에서 UI 흐름으로 교체 (게임 오버 1초 후 새 시드로 자동 재시작)
+const TEMP_RESTART_DELAY = 1;
 
 const canvas = document.getElementById('game');
 if (canvas instanceof HTMLCanvasElement) {
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    let gradient: CanvasGradient | null = null;
-    let cssW = 0;
-    let cssH = 0;
+  const renderer = new BugSquashRenderer(canvas);
+  window.addEventListener('resize', () => renderer.resize());
 
-    const draw = (): void => {
-      if (!gradient) return;
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, cssW, cssH);
+  let overTime = 0;
+  const newLogic = (seed?: number, overrides?: Partial<BugSquashConfig>): BugSquashLogic =>
+    new BugSquashLogic(createRng(seed ?? ((Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0)), overrides);
+  let logic = newLogic();
+  if (import.meta.env.DEV) {
+    window.__bugSquash = {
+      logic: () => logic,
+      restart: (seed, overrides) => {
+        overTime = 0;
+        logic = newLogic(seed, overrides);
+        return logic;
+      },
     };
-
-    const resize = (): void => {
-      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
-      cssW = canvas.clientWidth;
-      cssH = canvas.clientHeight;
-      canvas.width = Math.max(1, Math.round(cssW * dpr));
-      canvas.height = Math.max(1, Math.round(cssH * dpr));
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      gradient = ctx.createLinearGradient(0, 0, 0, cssH);
-      gradient.addColorStop(0, BG_TOP);
-      gradient.addColorStop(1, BG_BOTTOM);
-      draw();
-    };
-
-    window.addEventListener('resize', resize);
-    resize();
   }
+  let last = performance.now();
+
+  const frame = (now: number): void => {
+    const dt = Math.min(MAX_DT, Math.max(0, (now - last) / 1000));
+    last = now;
+    logic.update(dt);
+    renderer.render(logic, dt);
+    // TEMP: 7번에서 UI 흐름으로 교체
+    if (logic.isGameOver) {
+      overTime += dt;
+      if (overTime >= TEMP_RESTART_DELAY) {
+        logic = newLogic();
+        overTime = 0;
+      }
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
 }
