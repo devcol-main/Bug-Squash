@@ -14,7 +14,7 @@ export type BugSquashEventType =
   | 'missed' // 버그 노출 시간 종료. cell, kind, lifeDelta(-1, 골든은 0)
   | 'featureTapped' // 기능 탭. cell, lifeDelta -1 (기능은 즉시 사라짐)
   | 'featureExpired' // 기능이 그냥 사라짐. 변화 없음
-  | 'emptyTap' // 빈 칸 탭. cell
+  | 'emptyTap' // 빈 칸 탭(유예 없음). cell, lifeDelta -1 (뒤이어 comboReset(콤보>0일 때), lifeChanged, 라이프 0이면 gameOver)
   | 'cleared' // 보드 확장으로 페널티 없이 제거됨. cell, kind
   | 'lifeChanged' // lives(변화 후), lifeDelta
   | 'comboReset' // combo = 리셋 직전 콤보
@@ -131,16 +131,17 @@ export class BugSquashLogic {
 
   // ---- 입력 ----
   /**
-   * 칸 탭. 게임 오버 후, 확장 연출 중(보드가 움직이는 동안 억울한 콤보 리셋 방지),
-   * 범위 밖 인덱스는 무시(빈 이벤트). 반환 버퍼 유효 기간: 다음 호출 전까지.
+   * 칸 탭. 게임 오버 후, 확장 연출 중(보드가 움직이는 동안 억울한 페널티 방지),
+   * 범위 밖 인덱스는 무시(빈 이벤트). 빈 칸 탭은 라이프 -1 + 콤보 리셋(점수 변화 없음). 반환 버퍼 유효 기간: 다음 호출 전까지.
    */
   tap(cell: number): EventBuffer {
     this.buf.length = 0;
     if (this._gameOver || this.isExpanding || !isValidCell(cell, this._size)) return this.buf;
     const o = this.cells[cell] as CellObject;
     if (o.kind === null) {
-      this.emit('emptyTap', cell, null);
+      this.emit('emptyTap', cell, null).lifeDelta = -1;
       this.resetCombo();
+      this.loseLife();
       return this.buf;
     }
     const kind = o.kind;

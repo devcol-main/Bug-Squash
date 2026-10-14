@@ -154,18 +154,87 @@ describe('golden bug', () => {
 });
 
 describe('empty tap', () => {
-  it('tapping an empty cell only resets combo', () => {
+  it('tapping an empty cell costs one life, resets combo and keeps score', () => {
     const g = quiet();
     catchN(g, 3);
     const score = g.score;
     const ev = g.tap(7);
-    expect(types(ev)).toEqual(['emptyTap', 'comboReset']);
+    expect(find(ev, 'emptyTap')!.lifeDelta).toBe(-1);
     expect(g.combo).toBe(0);
-    expect(g.lives).toBe(3);
+    expect(g.lives).toBe(2);
     expect(g.score).toBe(score);
   });
 
-  it('tapping an out-of-range cell is ignored', () => {
+  it('empty tap with zero combo costs a life without emitting comboReset', () => {
+    const g = quiet();
+    const ev = g.tap(7);
+    expect(types(ev)).toEqual(['emptyTap', 'lifeChanged']);
+    expect(g.lives).toBe(2);
+  });
+
+  it('empty tap emits emptyTap, comboReset, lifeChanged in that order', () => {
+    const g = quiet();
+    catchN(g, 2);
+    const ev = g.tap(7);
+    expect(types(ev)).toEqual(['emptyTap', 'comboReset', 'lifeChanged']);
+    expect(find(ev, 'comboReset')!.combo).toBe(2);
+    expect(find(ev, 'lifeChanged')!.lifeDelta).toBe(-1);
+    expect(find(ev, 'lifeChanged')!.lives).toBe(2);
+  });
+
+  it('empty tap at one life ends the game and later taps and updates are ignored', () => {
+    const g = quiet({ startLives: 1 });
+    catchN(g, 1);
+    const ev = g.tap(7);
+    expect(types(ev)).toEqual(['emptyTap', 'comboReset', 'lifeChanged', 'gameOver']);
+    expect(g.isGameOver).toBe(true);
+    expect(g.lives).toBe(0);
+    expect(g.tap(7).length).toBe(0);
+    expect(g.update(1).length).toBe(0);
+  });
+
+  it('tapping a cell with a bug incurs no empty-tap penalty', () => {
+    const g = quiet();
+    g.forceSpawn(3, 'bug');
+    const ev = g.tap(3);
+    expect(find(ev, 'emptyTap')).toBeUndefined();
+    expect(g.lives).toBe(3);
+  });
+
+  it('tapping a just-caught cell again costs a life (no grace)', () => {
+    const g = quiet();
+    g.forceSpawn(3, 'bug');
+    g.tap(3);
+    const ev = g.tap(3);
+    expect(types(ev)).toContain('emptyTap');
+    expect(g.lives).toBe(2);
+  });
+
+  it('tapping a cell whose exposure just ended costs a life', () => {
+    const g = quiet();
+    g.forceSpawn(3, 'golden', 0.1); // 골든 놓침은 라이프 유지 -> 탭 페널티만 확인
+    g.update(0.2);
+    expect(g.getCell(3).kind).toBeNull();
+    expect(g.lives).toBe(3);
+    g.tap(3);
+    expect(g.lives).toBe(2);
+  });
+
+  it('taps during expansion are ignored even where objects were just cleared, and an empty tap afterwards costs a life', () => {
+    const g = quiet();
+    g.update(44.9);
+    g.forceSpawn(0, 'bug', 10);
+    g.update(0.1);
+    expect(g.isExpanding).toBe(true);
+    expect(g.tap(0).length).toBe(0);
+    expect(g.lives).toBe(3);
+    g.update(1.6);
+    expect(g.isExpanding).toBe(false);
+    expect(types(g.tap(0))).toContain('emptyTap');
+    expect(g.lives).toBe(2);
+  });
+
+  it('tapping an out-of-range cell is ignored without penalty', () => {
     const g = quiet();
     catchN(g, 1);
     expect(g.tap(9).length).toBe(0);
@@ -268,7 +337,6 @@ describe('board expansion', () => {
     g.forceSpawn(0, 'bug', 10);
     g.forceSpawn(1, 'hard', 10);
     g.forceSpawn(2, 'feature', 10);
-    g.tap(5); // 빈 칸: 콤보 0이라 이벤트만
     const ev = g.update(0.1);
     expect(types(ev).filter((t) => t === 'cleared').length).toBe(3);
     expect(find(ev, 'missed')).toBeUndefined();
@@ -448,7 +516,8 @@ describe('difficulty curve', () => {
 
 describe('determinism', () => {
   function run(seed: number): { log: string[]; state: string } {
-    const g = new BugSquashLogic(createRng(seed));
+    // 무작위 탭이 빈 칸 페널티로 금방 게임 오버가 되지 않도록 라이프를 넉넉히 둔다.
+    const g = new BugSquashLogic(createRng(seed), { startLives: 1e6, maxLives: 1e6 });
     const input = createRng(777);
     const log: string[] = [];
     for (let f = 0; f < 3000 && !g.isGameOver; f++) {
