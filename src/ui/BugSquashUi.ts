@@ -1,4 +1,4 @@
-import type { LeaderboardEntry } from '../../../../shared/leaderboard';
+import type { LeaderboardEntry } from '../shared/leaderboard';
 import type { Phase } from './flow';
 import { checkboxText, lifeSlotChange, lifeSlotState, muteButtonText, multiplierText, multiplierVisible, shouldBlinkMultiplier } from './hud';
 

@@ -1,0 +1,14 @@
+Bug Squash
+Copyright 2026 DevCol
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party assets bundled with this project:
+
+- JetBrains Mono (variable font, latin subset)
+  Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+  Licensed under the SIL Open Font License, Version 1.1.
+  License text: public/licenses/JetBrainsMono-OFL-LICENSE.txt
+
+The DevCol logo (src/assets/devcol-logo.png and devcol-logo-dark.png) is owned by DevCol.
+It is not licensed for reuse under Apache-2.0.

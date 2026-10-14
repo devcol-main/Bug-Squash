@@ -1,5 +1,5 @@
-import { LocalLeaderboardService, normalizeNickname, type StorageLike } from '../../../../shared/leaderboard';
-import { LEGACY_NICKNAME_KEYS, PlayerProfile } from '../../../../shared/player';
+import { LocalLeaderboardService, normalizeNickname, type StorageLike } from '../shared/leaderboard';
+import { LEGACY_NICKNAME_KEYS, PlayerProfile } from '../shared/player';
 import { UI_CONFIG } from './uiConfig';
 
 export interface BugSquashStats {

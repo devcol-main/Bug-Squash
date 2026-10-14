@@ -1,4 +1,4 @@
-import { type LeaderboardEntry, type LeaderboardService } from '../../../shared/leaderboard';
+import { type LeaderboardEntry, type LeaderboardService } from './shared/leaderboard';
 import { BugSquashLogic, type EventBuffer } from './core/BugSquashLogic';
 import type { BugSquashConfig } from './core/config';
 import { createRng } from './core/rng';

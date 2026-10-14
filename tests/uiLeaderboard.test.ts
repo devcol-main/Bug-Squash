@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { StorageLike } from '../../../shared/leaderboard';
+import type { StorageLike } from '../src/shared/leaderboard';
 import { createBugSquashLeaderboard, createPlayerProfile, makeStats, sanitizeBugSquashStats } from '../src/ui/leaderboard';
 import { UI_CONFIG } from '../src/ui/uiConfig';
 
@@ -10,7 +10,7 @@ function memStorage(): StorageLike & { data: Record<string, string> } {
 
 const stats = (maxCombo = 1) => ({ bugsCaught: 5, maxCombo, survivalSec: 42.5 });
 
-// 정렬/동점/저장소 오류 처리 자체는 shared/leaderboard/tests 가 검증한다.
+// 정렬/동점/저장소 오류 처리 자체는 tests/shared/leaderboard 가 검증한다.
 // 여기서는 bug-squash의 연결(저장 키, stats, Top 10)만 확인한다.
 describe('bug-squash leaderboard wiring', () => {
   it('entries are stored under the bugSquash.leaderboard key only and the service reports gameId bug-squash', async () => {

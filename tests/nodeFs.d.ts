@@ -3,3 +3,8 @@ declare module 'node:fs' {
   export function readFileSync(path: URL | string, encoding: 'utf8' | 'latin1'): string;
   export function existsSync(path: URL | string): boolean;
 }
+declare module 'node:crypto' {
+  export function createHash(algorithm: 'sha256'): {
+    update(data: string, inputEncoding: 'latin1'): { digest(encoding: 'hex'): string };
+  };
+}

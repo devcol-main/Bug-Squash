@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { layerSpan, newSnappedSquare, scanlineParams, snapDown, snapSquareEven } from '../src/view/pixelSnap';
 import { VIEW_CONFIG } from '../src/view/viewConfig';
 
@@ -105,10 +106,11 @@ describe('css and assets (I, J, K)', () => {
     expect(html).toMatch(/rel="icon"[^>]*href="\.\/src\/assets\/devcol-logo\.png"/);
     expect(html).toContain('class="brand-logo" src="./src/assets/devcol-logo-dark.png"');
   });
-  it('bug-squash favicon is a byte-identical copy of the Stack Up logo', () => {
+  it('favicon is the original DevCol logo (pinned hash), not the dark variant', () => {
     const a = read('../src/assets/devcol-logo.png', 'latin1');
-    const b = read('../../stack-up/src/assets/devcol-logo.png', 'latin1');
-    expect(a.length).toBeGreaterThan(0);
-    expect(a === b).toBe(true);
+    const dark = read('../src/assets/devcol-logo-dark.png', 'latin1');
+    const sha = createHash('sha256').update(a, 'latin1').digest('hex');
+    expect(sha).toBe('d3fc83164a2e420332da4870f0e935e995387db8c8b15447f5c5a82cdea77d56');
+    expect(a === dark).toBe(false);
   });
 });
