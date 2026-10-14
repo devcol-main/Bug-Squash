@@ -125,6 +125,8 @@ export const VIEW_CONFIG = {
     popupFont: 0.27,
     /** 팝업 텍스트 폭 상한 (칸 폭 비율). */
     popupMaxWidth: 0.9,
+    /** 팝업 글자 위쪽 가장자리가 보드 위쪽 가장자리 위로 올라갈 수 있는 한계 (칸 비율). HUD 띠 침범 방지. */
+    popupTopOverhang: 0.15,
     /** 팝업 페이드 시작 (진행도). */
     popupFadeStart: 0.55,
     popupGlow: 0.35,

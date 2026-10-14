@@ -12,6 +12,61 @@
 </head>
 <body>
 <canvas id="game" tabindex="-1"></canvas>
+<div id="ui" class="ui" data-phase="title">
+  <div class="col">
+    <div class="brand">
+      <img class="brand-logo" src="./src/assets/devcol-logo-dark.png" alt="DevCol logo" width="256" height="256" draggable="false">
+    </div>
+    <div class="logo" aria-hidden="true">BUG SQUASH</div>
+    <button id="mute" class="mute" type="button" data-ui aria-pressed="false">Sound: on</button>
+    <div id="score" class="score">0</div>
+    <div id="combo" class="combo" aria-hidden="true"></div>
+    <div id="hud-best" class="hud-best" hidden>BEST 0</div>
+    <div id="lives" class="lives" role="img" aria-label="Lives">
+      <svg class="life" viewBox="0 0 20 20" aria-hidden="true"><path class="life-fill" d="M10 1 19 10 10 19 1 10Z"/><path class="life-line" d="M10 1 19 10 10 19 1 10Z"/></svg>
+      <svg class="life" viewBox="0 0 20 20" aria-hidden="true"><path class="life-fill" d="M10 1 19 10 10 19 1 10Z"/><path class="life-line" d="M10 1 19 10 10 19 1 10Z"/></svg>
+      <svg class="life" viewBox="0 0 20 20" aria-hidden="true"><path class="life-fill" d="M10 1 19 10 10 19 1 10Z"/><path class="life-line" d="M10 1 19 10 10 19 1 10Z"/></svg>
+    </div>
+
+    <section class="screen title-screen">
+      <h1 class="title">BUG SQUASH</h1>
+      <div id="title-best" class="title-best" hidden>BEST 0</div>
+      <p class="tap-hint">Tap to start</p>
+      <p class="sub">Squash the bugs, but never tap a feature</p>
+    </section>
+
+    <section class="screen over-screen">
+      <div class="over-title">GAME OVER</div>
+      <div id="final-score" class="final-score">0</div>
+      <div id="best" class="best">BEST 0</div>
+      <div id="new-best" class="new-best" hidden>NEW BEST</div>
+      <div class="build-failed">Build failed</div>
+      <form id="nick-form" class="nick-form" data-ui autocomplete="off">
+        <input id="nick" class="nick" type="text" maxlength="12" placeholder="Nickname" aria-label="Nickname" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="submit" type="submit">Submit</button>
+      </form>
+      <ol id="board" class="board" data-ui></ol>
+      <button id="retry" class="retry" type="button">Tap to retry</button>
+    </section>
+
+    <button id="options-btn" class="options-btn" type="button" data-ui>Options</button>
+
+    <div id="options" class="options" data-ui hidden>
+      <div class="options-panel" role="dialog" aria-modal="true" aria-labelledby="options-title">
+        <h2 id="options-title" class="options-title">OPTIONS</h2>
+        <div class="opt-row"><span class="opt-label" id="lbl-sound">Sound (all)</span><button id="opt-sound" class="opt-toggle" type="button" aria-pressed="true" aria-labelledby="lbl-sound">On</button></div>
+        <div class="opt-row"><span class="opt-label" id="lbl-bgm">BGM</span><button id="opt-bgm" class="opt-toggle" type="button" aria-pressed="true" aria-labelledby="lbl-bgm">On</button></div>
+        <div class="opt-row"><label class="opt-label" for="opt-bgm-vol">BGM Volume</label><input id="opt-bgm-vol" class="opt-range" type="range" min="0" max="100" step="1" value="50"></div>
+        <div class="opt-row"><span class="opt-label" id="lbl-sfx">SFX</span><button id="opt-sfx" class="opt-toggle" type="button" aria-pressed="true" aria-labelledby="lbl-sfx">On</button></div>
+        <div class="opt-row"><label class="opt-label" for="opt-sfx-vol">SFX Volume</label><input id="opt-sfx-vol" class="opt-range" type="range" min="0" max="100" step="1" value="100"></div>
+        <div class="opt-row"><span class="opt-label" id="lbl-vib">Vibration</span><button id="opt-vib" class="opt-toggle" type="button" aria-pressed="true" aria-labelledby="lbl-vib">On</button></div>
+        <div class="opt-row"><span class="opt-label" id="lbl-rm">Reduced motion</span><button id="opt-rm" class="opt-toggle" type="button" aria-pressed="false" aria-labelledby="lbl-rm">Off</button></div>
+        <div class="opt-row"><span class="opt-label" id="lbl-reset">Best, nickname &amp; scores</span><button id="opt-reset" class="opt-toggle opt-danger" type="button">Reset data</button></div>
+        <button id="opt-close" class="opt-close" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

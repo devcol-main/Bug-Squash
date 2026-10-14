@@ -15,6 +15,8 @@ export interface TextSprite {
   h: number;
   /** 글자 폭만 (패딩 제외, CSS px). */
   textW: number;
+  /** 글자 높이만 (대문자/숫자 높이 근사, 글로우 패딩과 줄 간격 제외, CSS px). 스프라이트 세로 가운데 기준. */
+  textH: number;
 }
 
 type CreateSurface = (w: number, h: number) => HTMLCanvasElement;
@@ -84,6 +86,6 @@ export class TextCache {
     // 글로우를 진하게: 두 번 겹쳐 그린다.
     g.fillText(text, w / 2, h / 2);
     g.fillText(text, w / 2, h / 2);
-    return { canvas: surf, w, h, textW: Math.max(1, tw) };
+    return { canvas: surf, w, h, textW: Math.max(1, tw), textH: fontPx * 0.7 };
   }
 }

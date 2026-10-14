@@ -111,7 +111,8 @@ export function drawTexts(ctx: CanvasRenderingContext2D, fx: FxState, b: BoardRe
     const scale = Math.min(p.frac * 3, (FX.popupMaxWidth * cell) / spr.textW);
     const w = spr.w * scale;
     const h = spr.h * scale;
-    const cy = b.y + p.v * b.size - FX.popupRise * cell * easeOutCubic(k);
+    // 글자 위쪽 가장자리(글로우 제외)가 board.y - overhang 아래에 오도록 중심 y를 제한한다.
+    const cy = Math.max(b.y - FX.popupTopOverhang * cell + (spr.textH * scale) / 2, b.y + p.v * b.size - FX.popupRise * cell * easeOutCubic(k));
     ctx.globalAlpha = k < FX.popupFadeStart ? 1 : 1 - (k - FX.popupFadeStart) / (1 - FX.popupFadeStart);
     ctx.drawImage(spr.canvas, b.x + p.u * b.size - w / 2, cy - h / 2, w, h);
   }

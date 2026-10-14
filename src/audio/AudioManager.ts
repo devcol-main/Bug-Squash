@@ -104,11 +104,6 @@ export class AudioManager {
     }
   }
 
-  /** AudioContext가 실제로 running이면 true. 언락 리스너 해제 판단용. */
-  isRunning(): boolean {
-    return !!this.ctx && this.ctx.state === 'running';
-  }
-
   isMuted(): boolean {
     return this.muted;
   }
