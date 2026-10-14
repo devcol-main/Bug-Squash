@@ -4,6 +4,7 @@ import type { BugSquashConfig } from './core/config';
 import { createRng } from './core/rng';
 import { AudioManager } from './audio/AudioManager';
 import { PointerInput } from './input/PointerInput';
+import { KeyboardInput, shouldAcceptCellKey } from './input/KeyboardInput';
 import { setVibrationEnabled, vibrateFeatureTap, vibrateGameOver, vibrateMiss } from './input/vibration';
 import { BugSquashRenderer } from './view/BugSquashRenderer';
 import { GameFlow } from './ui/flow';
@@ -163,13 +164,14 @@ if (canvas instanceof HTMLCanvasElement) {
   // 프레임 루프 밖에서 한 번만 생성 (루프 안 클로저 할당 방지)
   const onCell = (cell: number): void => dispatch(logic.tap(cell));
 
+  const isButtonTarget = (t: EventTarget | null): boolean => t instanceof HTMLElement && t.closest('button') !== null;
   const isTextTarget = (t: EventTarget | null): boolean => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
 
   /** 새 판 시작: 새 시드(또는 DEV 지정), 연출/오디오/HUD 초기화. */
   const beginGame = (seed?: number, overrides?: Partial<BugSquashConfig>): void => {
-    // 숨겨질 닉네임 입력/버튼에 포커스가 남아 다음 판 Space가 막히지 않게
+    // 포커스가 남은 닉네임 입력/버튼 때문에 Space와 칸 키가 막히지 않게
     const active = document.activeElement;
-    if (active instanceof HTMLElement && (isTextTarget(active) || active === ui.retryButton)) active.blur();
+    if (active instanceof HTMLElement && (isTextTarget(active) || isButtonTarget(active))) active.blur();
     overlay = null;
     logic = newLogic(seed, overrides);
     renderer.resetFx(logic);
@@ -228,6 +230,13 @@ if (canvas instanceof HTMLCanvasElement) {
     e.preventDefault();
     onTap();
   });
+  // 칸 키(1-4/QWER/ASDF/ZXCV). 같은 큐를 거치므로 마우스/터치와 같은 프레임 경로로 logic.tap 이 불린다.
+  new KeyboardInput(
+    window,
+    { push: (cell) => input.pushCell(cell) },
+    () => logic.boardSize,
+    (e) => shouldAcceptCellKey({ phase: flow.phase, optionsOpen: flow.optionsOpen, textTarget: isTextTarget(e.target), buttonTarget: isButtonTarget(e.target) }),
+  );
   window.addEventListener('keydown', (e) => {
     if (flow.optionsOpen && e.code === 'Escape') {
       closeOptions();

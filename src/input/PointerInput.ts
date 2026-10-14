@@ -34,6 +34,9 @@ export class PointerInput {
     this.gridSize = gridSize;
   }
 
+  /** 다른 입력원(키보드)이 같은 큐에 칸을 넣는다. 비활성이면 false. */
+  pushCell(cell: number): boolean { return this.queue.push(cell); }
+
   /** 쌓인 입력을 모두 버린다 (일시정지/복귀 때). */
   clear(): void { this.queue.clear(); }
 
