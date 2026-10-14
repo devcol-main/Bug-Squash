@@ -34,7 +34,7 @@ export function slackBias(cssW: number, cssH: number): number {
 
 /**
  * HUD 오버레이(ui.css)의 내용이 실제로 차지하는 아래 끝 y (CSS px, safe-area 제외). 띠(hudHeight) 안에 들어가야 한다.
- * ui.css 값과 맞춰 둔 미러: u = min(폭, 높이*9/16)/100. 라이프 = 3u + 52px + max(16px, 4.4u), 배율 = 16.4u + 4.4u*1.1.
+ * ui.css 값과 맞춰 둔 미러: u = min(폭, 높이*9/16)/100. 라이프(정사각형 블록) = 3u + 52px + max(16px, 4.4u), 배율 = 16.4u + 4.4u*1.1.
  */
 export function hudContentBottom(cssW: number, cssH: number): number {
   const u = Math.min(cssW, cssH * (9 / 16)) / 100;

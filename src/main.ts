@@ -147,9 +147,6 @@ if (canvas instanceof HTMLCanvasElement) {
         case 'missed':
           if (ev.kind !== 'golden') vibrateMiss();
           break;
-        case 'multiplierUp':
-          ui.popMultiplier();
-          break;
         case 'boardExpand':
           syncBoard(); // 확장을 consume한 같은 프레임에 입력 매핑을 4x4로
           break;

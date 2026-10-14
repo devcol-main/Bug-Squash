@@ -1,6 +1,6 @@
 import type { LeaderboardEntry } from '../../../../shared/leaderboard';
 import type { Phase } from './flow';
-import { lifeSlotChange, lifeSlotState, multiplierText, multiplierVisible } from './hud';
+import { checkboxText, lifeSlotChange, lifeSlotState, muteButtonText, multiplierText, multiplierVisible, shouldBlinkMultiplier } from './hud';
 
 /** 클래스를 뺐다 다시 붙여 CSS 애니메이션을 처음부터 재생(이벤트 때만 호출). */
 function replayClass(e: HTMLElement, cls: string): void {
@@ -53,7 +53,7 @@ export class BugSquashUi {
   private readonly board = el('board', HTMLOListElement);
   private readonly rows: { li: HTMLLIElement; rank: HTMLSpanElement; name: HTMLSpanElement; pts: HTMLSpanElement }[] = [];
   private readonly emptyRow: HTMLLIElement;
-  private readonly lifeIcons: SVGElement[] = [];
+  private readonly lifeIcons: HTMLElement[] = [];
   private shownScore = -1;
   private shownMultiplier = -1;
   private shownLives = -1;
@@ -75,7 +75,7 @@ export class BugSquashUi {
       this.board.append(li);
       this.rows.push({ li, rank, name, pts });
     }
-    for (const icon of Array.from(this.lives.querySelectorAll<SVGElement>('.life'))) this.lifeIcons.push(icon);
+    for (const icon of Array.from(this.lives.querySelectorAll<HTMLElement>('.life'))) this.lifeIcons.push(icon);
     // 로고 로드 실패 시 깨진 이미지/alt 텍스트 대신 숨긴다(게임 동작과 무관)
     for (const img of Array.from(this.root.querySelectorAll<HTMLImageElement>('.brand-logo'))) {
       const hide = (): void => {
@@ -112,19 +112,17 @@ export class BugSquashUi {
   /** 콤보 배율 표시. 값이 바뀔 때만 DOM 갱신. ×1이면 투명(자리는 유지). */
   setMultiplier(m: number): void {
     if (m === this.shownMultiplier) return;
+    const prev = this.shownMultiplier;
     this.shownMultiplier = m;
     this.combo.textContent = multiplierText(m);
     this.combo.classList.toggle('on', multiplierVisible(m));
-  }
-
-  /** 배율이 오를 때 크게 튀었다 돌아오는 연출. 연속 발생하면 처음부터 다시 재생. */
-  popMultiplier(): void {
-    replayClass(this.combo, 'pop');
+    // 배율이 오를 때 앰버 반전 블록으로 깜박임(연속 발생하면 처음부터 재생). Reduced motion은 CSS에서 애니메이션을 끈다.
+    if (prev >= 0 && shouldBlinkMultiplier(prev, m)) replayClass(this.combo, 'blink');
   }
 
   /**
-   * 라이프 다이아몬드 갱신. 값이 바뀔 때만 DOM을 쓴다.
-   * animate가 true면 잃은 칸은 깨짐, 회복한 칸은 채움 연출을 재생한다(새 게임 초기화는 false).
+   * 라이프 블록 갱신. 값이 바뀔 때만 DOM을 쓴다.
+   * animate가 true면 잃은 칸은 깨짐(픽셀 흩어짐), 회복한 칸은 반전 깜박임 연출을 재생한다(새 게임 초기화는 false).
    */
   setLives(n: number, animate: boolean): void {
     if (n === this.shownLives) return;
@@ -161,28 +159,28 @@ export class BugSquashUi {
   /** 축소 모드(OS 설정 OR 수동 설정)를 CSS 클래스로 반영. */
   setReducedMotion(on: boolean): void {
     this.root.classList.toggle('reduced', on);
-    this.optReduced.textContent = on ? 'On' : 'Off';
+    this.optReduced.textContent = checkboxText(on);
     this.optReduced.setAttribute('aria-pressed', String(on));
   }
 
   setVibration(on: boolean): void {
-    this.optVib.textContent = on ? 'On' : 'Off';
+    this.optVib.textContent = checkboxText(on);
     this.optVib.setAttribute('aria-pressed', String(on));
   }
 
   setMuted(m: boolean): void {
-    this.muteButton.textContent = m ? 'Sound: off' : 'Sound: on';
+    this.muteButton.textContent = muteButtonText(m);
     this.muteButton.setAttribute('aria-pressed', String(m));
     // 옵션의 전체 사운드 토글: On = 소리 켜짐
-    this.optSound.textContent = m ? 'Off' : 'On';
+    this.optSound.textContent = checkboxText(!m);
     this.optSound.setAttribute('aria-pressed', String(!m));
   }
 
   /** 오디오 설정을 옵션 컨트롤에 반영. 사용자가 드래그 중인 슬라이더는 건드리지 않는다. */
   syncAudio(a: { bgmOn: boolean; sfxOn: boolean; bgmVolume: number; sfxVolume: number }): void {
-    this.optBgm.textContent = a.bgmOn ? 'On' : 'Off';
+    this.optBgm.textContent = checkboxText(a.bgmOn);
     this.optBgm.setAttribute('aria-pressed', String(a.bgmOn));
-    this.optSfx.textContent = a.sfxOn ? 'On' : 'Off';
+    this.optSfx.textContent = checkboxText(a.sfxOn);
     this.optSfx.setAttribute('aria-pressed', String(a.sfxOn));
     const bv = String(Math.round(a.bgmVolume * 100));
     const sv = String(Math.round(a.sfxVolume * 100));
