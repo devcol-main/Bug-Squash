@@ -8,6 +8,9 @@ import {
   cueForEvent,
   nextBgmTime,
   effectiveGains,
+  gameOverHumDuration,
+  gameOverSoundDuration,
+  pulseGainScale,
   clampVolume,
   MuteStore,
   pulseWaveCoeffs,
@@ -40,6 +43,7 @@ export class AudioManager {
   private noise: AudioBuffer | null = null;
   /** 듀티별 펄스 PeriodicWave (C.bgm.duties 순서). 언락 때 한 번만 만든다. */
   private waves: PeriodicWave[] = [];
+  private reducedMotion = false;
   private voices = 0;
   private readonly cue: SoundCue = { kind: 'catch', step: 0 };
   private muted: boolean;
@@ -247,7 +251,7 @@ export class AudioManager {
     if (!v) return;
     v.osc.frequency.value = freq;
     v.g.gain.setValueAtTime(0.0001, t0);
-    const peak = L.gain * (C.bgm.dutyGain[duty] ?? 1);
+    const peak = L.gain * this.dutyScale(duty);
     v.g.gain.linearRampToValueAtTime(peak, t0 + L.attack);
     v.g.gain.exponentialRampToValueAtTime(peak * L.sustainRatio, t0 + dur * 0.5);
     v.g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
@@ -296,6 +300,16 @@ export class AudioManager {
 
   // ---- SFX (노드 수: 잡기 7, 1타 2, 골든 2, 에러 2, 놓침 2, 확장 5, 게임 오버 4) ----
 
+  /** PeriodicWave가 실제로 있을 때만 듀티 보정을 적용한다 (대체 'square'는 1). */
+  private dutyScale(duty: number): number {
+    return pulseGainScale(this.waves[duty] !== undefined, C.bgm.dutyGain[duty]);
+  }
+
+  /** reduced motion이면 게임 오버 소리가 짧아진다. */
+  setReducedMotion(on: boolean): void {
+    this.reducedMotion = on;
+  }
+
   private play(cue: SoundCue): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -308,7 +322,7 @@ export class AudioManager {
         const blip = this.osc(this.waves[c.blipDuty] ?? 'square', t0, t0 + c.blipDur, false);
         if (blip) {
           blip.osc.frequency.value = f;
-          this.envelope(blip.g, t0, c.blipDur, c.blipGain * C.bgm.dutyGain[c.blipDuty]!);
+          this.envelope(blip.g, t0, c.blipDur, c.blipGain * this.dutyScale(c.blipDuty));
         }
         this.clicks(t0, 1, 0, c.clickDur, c.clickGain, c.clickFilterFreq);
         const tick = this.osc('square', t0, t0 + c.tickDur, false);
@@ -327,7 +341,7 @@ export class AudioManager {
         for (let i = 0; i < k.steps; i++) {
           v.osc.frequency.setValueAtTime(k.minFreq + Math.random() * (k.maxFreq - k.minFreq), t0 + i * stepDur);
         }
-        this.envelope(v.g, t0, k.dur, k.gain * C.bgm.dutyGain[k.duty]!);
+        this.envelope(v.g, t0, k.dur, k.gain * this.dutyScale(k.duty));
         break;
       }
       case 'golden': {
@@ -337,7 +351,7 @@ export class AudioManager {
         const v = this.osc(this.waves[g.duty] ?? 'square', t0, t0 + dur, false);
         if (!v) break;
         for (let i = 0; i < n; i++) v.osc.frequency.setValueAtTime(semitoneToFreq(g.baseFreq, g.notes[i]!), t0 + i * g.stepDelay);
-        this.envelope(v.g, t0, dur, g.gain * C.bgm.dutyGain[g.duty]!);
+        this.envelope(v.g, t0, dur, g.gain * this.dutyScale(g.duty));
         break;
       }
       case 'error': {
@@ -370,24 +384,26 @@ export class AudioManager {
         if (v) {
           v.osc.frequency.setValueAtTime(x.freq, t0);
           v.osc.frequency.exponentialRampToValueAtTime(x.endFreq, t0 + x.dur);
-          this.envelope(v.g, t0, x.dur, x.gain * C.bgm.dutyGain[x.duty]!);
+          this.envelope(v.g, t0, x.dur, x.gain * this.dutyScale(x.duty));
         }
         this.clicks(t0, x.clicks, x.clickGap, x.clickDur, x.clickGain, x.clickFilterFreq);
         break;
       }
       case 'gameOver': {
         const o = C.gameOver;
-        const v = this.osc(o.type, t0, t0 + o.dur, false);
+        const dur = gameOverSoundDuration(this.reducedMotion);
+        const v = this.osc(o.type, t0, t0 + dur, false);
         if (v) {
           v.osc.frequency.setValueAtTime(o.freq, t0);
-          v.osc.frequency.exponentialRampToValueAtTime(o.endFreq, t0 + o.dur);
+          v.osc.frequency.exponentialRampToValueAtTime(o.endFreq, t0 + dur);
           v.g.gain.setValueAtTime(o.gain, t0);
-          v.g.gain.exponentialRampToValueAtTime(0.0001, t0 + o.dur);
+          v.g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
         }
-        const hum = this.osc('sine', t0, t0 + o.humDur, false);
+        const humDur = gameOverHumDuration(this.reducedMotion);
+        const hum = this.osc('sine', t0, t0 + humDur, false);
         if (hum) {
           hum.osc.frequency.value = o.humFreq;
-          this.envelope(hum.g, t0, o.humDur, o.humGain);
+          this.envelope(hum.g, t0, humDur, o.humGain);
         }
         break;
       }

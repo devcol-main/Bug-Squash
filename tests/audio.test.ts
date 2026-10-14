@@ -13,6 +13,9 @@ import {
   cueForEvent,
   defaultSettings,
   effectiveGains,
+  gameOverHumDuration,
+  gameOverSoundDuration,
+  pulseGainScale,
   nextBgmTime,
   sanitizeSettings,
   stepToFreq,
@@ -20,7 +23,7 @@ import {
   type StorageLike,
 } from '../src/audio/audioLogic';
 import { BGM_SONG, SONG_BARS, STEPS_PER_BAR } from '../src/audio/bgmSong';
-import { CRT_OFF_DURATION } from '../src/fxTiming';
+import { CRT_OFF_DURATION, REDUCED_END_FADE_DURATION } from '../src/fxTiming';
 import { VIEW_CONFIG } from '../src/view/viewConfig';
 import type { BugSquashEvent } from '../src/core/BugSquashLogic';
 
@@ -319,4 +322,26 @@ describe('nextBgmTime', () => {
   it('already scheduled ahead keeps the previous time', () => expect(nextBgmTime(10.3, 10, 0.1)).toBe(10.3));
   it('previous time already passed re-aligns to now plus the delay', () => expect(nextBgmTime(9, 10, 0.1)).toBeCloseTo(10.1));
   it('non-finite now never returns NaN', () => expect(Number.isFinite(nextBgmTime(null, NaN, 0.1))).toBe(true));
+});
+
+describe('gameOverSoundDuration', () => {
+  it('reduced motion on -> reduced fade length', () => expect(gameOverSoundDuration(true)).toBe(REDUCED_END_FADE_DURATION));
+  it('reduced motion off -> AUDIO_CONFIG.gameOver.dur (= CRT off length)', () => {
+    expect(gameOverSoundDuration(false)).toBe(AUDIO_CONFIG.gameOver.dur);
+    expect(gameOverSoundDuration(false)).toBe(CRT_OFF_DURATION);
+  });
+});
+
+describe('gameOverHumDuration', () => {
+  it('default mode -> hum keeps its configured length', () => expect(gameOverHumDuration(false)).toBe(AUDIO_CONFIG.gameOver.humDur));
+  it('reduced mode -> hum is capped at the reduced fade length', () => {
+    expect(gameOverHumDuration(true)).toBeLessThanOrEqual(REDUCED_END_FADE_DURATION);
+    expect(gameOverHumDuration(true)).toBe(Math.min(AUDIO_CONFIG.gameOver.humDur, REDUCED_END_FADE_DURATION));
+  });
+});
+
+describe('pulseGainScale', () => {
+  it('PeriodicWave used -> dutyGain applied', () => expect(pulseGainScale(true, 1.5)).toBe(1.5));
+  it('fallback to square -> gain stays 1', () => expect(pulseGainScale(false, 1.5)).toBe(1));
+  it('PeriodicWave used but no dutyGain entry -> 1', () => expect(pulseGainScale(true, undefined)).toBe(1));
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GameFlow } from '../src/ui/flow';
+import { releaseFocus } from '../src/ui/focusRelease';
 import { DEFAULT_CONFIG } from '../src/core/config';
 import { UI_CONFIG } from '../src/ui/uiConfig';
 
@@ -112,5 +113,35 @@ describe('GameFlow', () => {
     expect(f.tap()).toBe('none');
     f.closeOptions();
     expect(f.tap()).toBe('retry');
+  });
+});
+
+describe('releaseFocus', () => {
+  const fake = () => {
+    let n = 0;
+    return { blur: () => { n++; }, count: () => n };
+  };
+  it('focus on the submit button -> blurred and reported', () => {
+    const input = fake();
+    const submit = fake();
+    expect(releaseFocus(submit, [input, submit])).toBe(true);
+    expect(submit.count()).toBe(1);
+    expect(input.count()).toBe(0);
+  });
+  it('focus on the nickname input -> blurred and reported', () => {
+    const input = fake();
+    const submit = fake();
+    expect(releaseFocus(input, [input, submit])).toBe(true);
+    expect(input.count()).toBe(1);
+  });
+  it('focus elsewhere -> nothing is blurred', () => {
+    const input = fake();
+    const submit = fake();
+    const other = fake();
+    expect(releaseFocus(other, [input, submit])).toBe(false);
+    expect(other.count() + input.count() + submit.count()).toBe(0);
+  });
+  it('no focused element -> returns false without throwing', () => {
+    expect(releaseFocus(null, [{}])).toBe(false);
   });
 });

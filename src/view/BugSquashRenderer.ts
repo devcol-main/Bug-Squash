@@ -66,7 +66,7 @@ export class BugSquashRenderer {
 
     this.dpr = dpr;
     this.unitW = codeLogUnitWidth(w);
-    this.crt = buildCrtOverlay(w, h, dpr, false);
+    this.crt = null; // 깜박임 오버레이/구운 오버레이 모두 필요할 때 지연 생성
     this.crtBaked = null;
     this.sprites.build(this._board.size, dpr, [VIEW_CONFIG.smallGrid, DEFAULT_CONFIG.largeBoardSize]);
     this.text.build(this._board.size, dpr);
@@ -181,7 +181,8 @@ export class BugSquashRenderer {
 
     // CRT 오버레이 (맨 위): 스캔라인 + 비네팅. 깜박임을 끈 모드는 기본 어둡기를 오버레이에 구워 두어 전체 화면 fillRect 를 생략한다.
     if (policy.crtFlicker) {
-      if (this.crt) ctx.drawImage(this.crt, 0, 0, this.cssW, this.cssH);
+      this.crt ??= buildCrtOverlay(this.cssW, this.cssH, this.dpr, false);
+      ctx.drawImage(this.crt, 0, 0, this.cssW, this.cssH);
       ctx.fillStyle = '#000';
       ctx.globalAlpha = c.crt.flickerAmp + crtFlickerValue(policy, this.time);
       ctx.fillRect(0, 0, this.cssW, this.cssH);

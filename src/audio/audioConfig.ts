@@ -76,7 +76,7 @@ export const AUDIO_CONFIG = {
     clickGain: 0.14,
     clickFilterFreq: 2500,
   },
-  /** 게임 오버: CRT 전원 꺼짐. 길이는 시각 연출과 공유 상수(fxTiming). audio는 reduced motion을 모르므로 항상 0.4초. */
+  /** 게임 오버: CRT 전원 꺼짐. 길이는 시각 연출과 공유 상수(fxTiming). reduced이면 AudioManager가 REDUCED_END_FADE_DURATION으로 대체. */
   gameOver: {
     dur: CRT_OFF_DURATION,
     freq: 1500,

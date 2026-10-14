@@ -30,6 +30,7 @@ export class BugSquashUi {
   readonly muteButton = el('mute', HTMLButtonElement);
   readonly form = el('nick-form', HTMLFormElement);
   readonly input = el('nick', HTMLInputElement);
+  readonly submitButton = el('nick-submit', HTMLButtonElement);
   readonly retryButton = el('retry', HTMLButtonElement);
   private readonly score = el('score', HTMLDivElement);
   readonly optionsButton = el('options-btn', HTMLButtonElement);

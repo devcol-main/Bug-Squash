@@ -1,6 +1,7 @@
 // AudioContext 없이 테스트 가능한 순수 로직.
 import type { BugSquashEvent } from '../core/BugSquashLogic';
 import { AUDIO_CONFIG } from './audioConfig';
+import { REDUCED_END_FADE_DURATION } from '../fxTiming';
 import { BGM_SONG, SONG_BARS, STEPS_PER_BAR } from './bgmSong';
 
 export type SoundKind = 'catch' | 'crack' | 'golden' | 'error' | 'miss' | 'expand' | 'gameOver';
@@ -289,4 +290,19 @@ export function nextBgmTime(prev: number | null, now: number, startDelay: number
 /** 새 SFX 보이스 시작 허용 여부. */
 export function canStartSfxVoice(active: number): boolean {
   return active < AUDIO_CONFIG.maxVoices;
+}
+
+/** 게임 오버 소리 길이: reduced motion이면 짧은 페이드, 아니면 CRT 꺼짐 길이. */
+export function gameOverSoundDuration(reduced: boolean): number {
+  return reduced ? REDUCED_END_FADE_DURATION : AUDIO_CONFIG.gameOver.dur;
+}
+
+/** 게임 오버 험 길이: 본 소리보다 길지 않게 제한한다 (기본 모드 0.3초는 그대로). */
+export function gameOverHumDuration(reduced: boolean): number {
+  return Math.min(AUDIO_CONFIG.gameOver.humDur, gameOverSoundDuration(reduced));
+}
+
+/** 듀티 보정 게인: 실제 PeriodicWave를 쓸 때만 dutyGain을 곱하고, 대체 파형('square')이면 1. */
+export function pulseGainScale(usedPeriodicWave: boolean, dutyGain: number | undefined): number {
+  return usedPeriodicWave ? (dutyGain ?? 1) : 1;
 }

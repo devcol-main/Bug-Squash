@@ -16,6 +16,8 @@ import { BugSquashUi } from './ui/BugSquashUi';
 import { FrameClock } from './ui/frameClock';
 import { PauseController } from './ui/pause';
 import { watchDpr } from './ui/dprWatcher';
+import { onMediaChange } from './ui/mediaQuery';
+import { releaseFocus } from './ui/focusRelease';
 import { waitForFont } from './ui/fonts';
 import { UI_CONFIG } from './ui/uiConfig';
 import './ui/ui.css';
@@ -73,12 +75,15 @@ if (canvas instanceof HTMLCanvasElement) {
     const on = effectiveReducedMotion(osReduced, manualReduced);
     renderer.setReducedMotion(on);
     ui.setReducedMotion(on);
+    audio.setReducedMotion(on);
   };
   applyReducedMotion();
-  motionQuery?.addEventListener('change', (e) => {
-    osReduced = e.matches;
-    applyReducedMotion();
-  });
+  if (motionQuery) {
+    onMediaChange(motionQuery, () => {
+      osReduced = motionQuery.matches;
+      applyReducedMotion();
+    });
+  }
 
   /** 이번 판의 결과 (게임 오버 이벤트에서 채움). 제출은 flow.claimSubmit()으로 판당 1회. */
   const result = { score: 0, bugsCaught: 0, maxCombo: 0, time: 0 };
@@ -342,7 +347,8 @@ if (canvas instanceof HTMLCanvasElement) {
   ui.form.addEventListener('submit', (e) => {
     e.preventDefault();
     submitScore();
-    ui.input.blur();
+    // 제출 후 Submit 버튼/입력칸에 포커스가 남으면 Space가 재시작 대신 Submit을 다시 누른다
+    releaseFocus(document.activeElement as HTMLElement | null, [ui.input, ui.submitButton]);
   });
 
   // 리사이즈: window resize, iframe 크기 변경(ResizeObserver), 모바일 주소창(visualViewport)을 모두 받아
