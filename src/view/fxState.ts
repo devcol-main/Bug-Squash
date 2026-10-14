@@ -138,6 +138,7 @@ export class FxState {
           this.startScreenGlitch();
           break;
         }
+        case 'emptyTap': // 빈 칸 탭: 놓침과 같은 빨간 깜박임 (점수/분해/글리치 없음)
         case 'missed':
           if (e.kind !== 'golden') {
             const [u, v] = cellCenter(e.cell, gridSize);

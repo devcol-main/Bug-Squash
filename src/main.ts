@@ -7,6 +7,7 @@ import { PointerInput } from './input/PointerInput';
 import { KeyboardInput, shouldAcceptCellKey } from './input/KeyboardInput';
 import { setVibrationEnabled, vibrateFeatureTap, vibrateGameOver, vibrateMiss } from './input/vibration';
 import { BugSquashRenderer } from './view/BugSquashRenderer';
+import { vibrationForEvent } from './ui/vibrationCue';
 import { GameFlow } from './ui/flow';
 import { ConfirmGate, effectiveReducedMotion, hudBest, reducedMotionStore, resetUserData, vibrationStore } from './ui/options';
 import { BestScore, browserStorage } from './ui/records';
@@ -141,18 +142,15 @@ if (canvas instanceof HTMLCanvasElement) {
     audio.consume(buf);
     for (let i = 0; i < buf.length; i++) {
       const ev = buf.at(i);
+      const vib = vibrationForEvent(ev);
+      if (vib === 'featureTap') vibrateFeatureTap();
+      else if (vib === 'miss') vibrateMiss();
+      else if (vib === 'gameOver') vibrateGameOver();
       switch (ev.type) {
-        case 'featureTapped':
-          vibrateFeatureTap();
-          break;
-        case 'missed':
-          if (ev.kind !== 'golden') vibrateMiss();
-          break;
         case 'boardExpand':
           syncBoard(); // 확장을 consume한 같은 프레임에 입력 매핑을 4x4로
           break;
         case 'gameOver':
-          vibrateGameOver();
           onGameOver();
           break;
         default:
@@ -233,7 +231,7 @@ if (canvas instanceof HTMLCanvasElement) {
   // 칸 키(1-4/QWER/ASDF/ZXCV). 같은 큐를 거치므로 마우스/터치와 같은 프레임 경로로 logic.tap 이 불린다.
   new KeyboardInput(
     window,
-    { push: (cell) => input.pushCell(cell) },
+    { push: (cell) => { renderer.setKeyHints(true); return input.pushCell(cell); } },
     () => logic.boardSize,
     (e) => shouldAcceptCellKey({ phase: flow.phase, optionsOpen: flow.optionsOpen, textTarget: isTextTarget(e.target), buttonTarget: isButtonTarget(e.target) }),
   );

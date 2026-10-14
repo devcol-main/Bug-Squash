@@ -34,7 +34,7 @@ export function semitoneToFreq(base: number, semitones: number): number {
 
 /**
  * 이벤트 → 소리. out을 채우고 소리가 있으면 true (프레임마다 할당하지 않기 위해 out 재사용).
- * 골든 놓침은 라이프 손실이 없으므로 무음. spawn/cleared/lifeChanged 등은 무음.
+ * 골든 놓침은 라이프 손실이 없으므로 무음. emptyTap 은 놓침(miss)과 같은 소리. spawn/cleared/lifeChanged 등은 무음.
  */
 export function cueForEvent(ev: BugSquashEvent, out: SoundCue): boolean {
   out.step = 0;
@@ -49,6 +49,7 @@ export function cueForEvent(ev: BugSquashEvent, out: SoundCue): boolean {
     case 'hardHit':
       out.kind = 'crack';
       return true;
+    case 'emptyTap': // 빈 칸 탭 페널티: 놓침과 같은 소리
     case 'missed':
       if (ev.kind === 'golden') return false;
       out.kind = 'miss';

@@ -137,11 +137,47 @@ describe('FxState.consume', () => {
     expect(fx.boardHidden).toBe(false);
     expect(fx.endT).toBe(-1);
   });
-  it('spawn, cleared, emptyTap -> no effects', () => {
+  it('spawn and cleared -> no effects', () => {
     const fx = fresh();
-    fx.consume(buf(ev('spawn', 0, 'bug'), ev('cleared', 1, 'bug'), ev('emptyTap', 2, null)), 3);
+    fx.consume(buf(ev('spawn', 0, 'bug'), ev('cleared', 1, 'bug')), 3);
     expect(fx.particles.activeCount + fx.flashes.activeCount + fx.popups.activeCount).toBe(0);
     expect(fx.screenGlitchT).toBe(-1);
+  });
+  it('emptyTap -> one red outline flash at that cell, same as a miss, with no particles, popups or glitch', () => {
+    const fx = fresh(3);
+    fx.consume(buf(ev('emptyTap', 4, null, { lifeDelta: -1 })), 3);
+    const miss = fresh(3);
+    miss.consume(buf(ev('missed', 4, 'bug', { lifeDelta: -1 })), 3);
+    const f = fx.flashes.items.filter((x) => x.active);
+    const m = miss.flashes.items.filter((x) => x.active);
+    expect(f.length).toBe(1);
+    expect(f[0]).toEqual(m[0]);
+    expect(f[0]!.color).toBe(RED);
+    expect(f[0]!.style).toBe(FlashStyle.Outline);
+    expect([f[0]!.u, f[0]!.v]).toEqual(cellCenter(4, 3));
+    expect(fx.particles.activeCount + fx.popups.activeCount).toBe(0);
+    expect(fx.screenGlitchT).toBe(-1);
+    expect(fx.cellGlitch.every((c) => c === -1)).toBe(true);
+  });
+  it('emptyTap -> same flash with reduced motion on', () => {
+    const fx = fresh(3);
+    fx.setReducedMotion(true);
+    fx.consume(buf(ev('emptyTap', 0, null)), 3);
+    expect(fx.flashes.activeCount).toBe(1);
+    expect(fx.particles.activeCount + fx.popups.activeCount).toBe(0);
+  });
+  it('[emptyTap(5), boardExpand] in one buffer -> the flash uses the 3x3 position', () => {
+    const fx = fresh(3);
+    fx.consume(buf(ev('emptyTap', 5, null), ev('boardExpand', -1, null)), 4);
+    const f = fx.flashes.items.find((x) => x.active)!;
+    expect([f.u, f.v]).toEqual(cellCenter(5, 3));
+    expect(f.frac).toBeCloseTo(1 / 3);
+  });
+  it('[boardExpand, emptyTap(5)] in one buffer -> the flash uses the 4x4 position', () => {
+    const fx = fresh(3);
+    fx.consume(buf(ev('boardExpand', -1, null), ev('emptyTap', 5, null)), 4);
+    const f = fx.flashes.items.find((x) => x.active)!;
+    expect([f.u, f.v]).toEqual(cellCenter(5, 4));
   });
   it('update past all durations -> every effect is reclaimed', () => {
     const fx = fresh();

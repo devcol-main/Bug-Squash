@@ -58,8 +58,12 @@ describe('cueForEvent', () => {
     expect(cue({ type: 'boardExpand', kind: null })?.kind).toBe('expand');
     expect(cue({ type: 'gameOver', kind: null })?.kind).toBe('gameOver');
   });
+  it('emptyTap maps to the same miss sound as a missed bug and leaves step at 0', () => {
+    expect(cue({ type: 'emptyTap', kind: null, lifeDelta: -1 })).toEqual(cue({ type: 'missed', kind: 'bug', lifeDelta: -1 }));
+    expect(cue({ type: 'emptyTap', kind: null })?.kind).toBe('miss');
+  });
   it('silent event types produce no cue', () => {
-    for (const type of ['spawn', 'featureExpired', 'emptyTap', 'cleared', 'lifeChanged', 'comboReset', 'multiplierUp'] as const) {
+    for (const type of ['spawn', 'featureExpired', 'cleared', 'lifeChanged', 'comboReset', 'multiplierUp'] as const) {
       expect(cue({ type })).toBeNull();
     }
   });

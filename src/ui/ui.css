@@ -167,6 +167,8 @@
 .title-best[hidden] { display: none; }
 .tap-hint { box-sizing: border-box; width: calc(var(--u) * 80); margin: 0; padding: calc(var(--u) * 6) 0 calc(var(--u) * 2); font-size: calc(var(--u) * 5); color: var(--term-green);
   border: 1px solid var(--term-dim); border-top: 0; border-bottom: 0; }
+.keys-hint { box-sizing: border-box; width: calc(var(--u) * 80); margin: 0; padding: 0 calc(var(--u) * 3) calc(var(--u) * 1.5); font-size: max(10px, calc(var(--u) * 3.2)); font-weight: 600; color: var(--term-dim-text);
+  border: 1px solid var(--term-dim); border-top: 0; border-bottom: 0; }
 .sub { box-sizing: border-box; width: calc(var(--u) * 80); margin: 0; padding: 0 calc(var(--u) * 3) calc(var(--u) * 5); font-size: max(10px, calc(var(--u) * 3.2)); font-weight: 600; color: var(--term-dim-text);
   border: 1px solid var(--term-dim); border-top: 0; }
 

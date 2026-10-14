@@ -40,6 +40,9 @@ export const VIEW_CONFIG = {
   /** 칸 왼쪽 위 타이틀바 장식 (칸 한 변 비율): 점 개수/크기/간격, 막대 길이/두께, 안쪽 여백. */
   cellTitle: { dots: 3, dot: 0.026, gap: 0.022, barW: 0.26, barH: 0.016, pad: 0.03, brightAlpha: 0.75 },
 
+  /** 키 힌트 글자: 어두운 녹색(--term-dim-text), 폰트 크기(칸 한 변 비율, 최소 CSS px), 타이틀바 막대 끝과 글자 사이 최소 간격(칸 한 변 비율, 디바이스 px). */
+  keyHint: { color: '#3A9A62', font: 0.12, minFont: 9, gapMin: 0.06, gapMinPx: 2 },
+
   colors: {
     bug: '#FFB000',
     hard: '#FF7A1A',

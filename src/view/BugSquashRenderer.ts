@@ -10,6 +10,7 @@ import { SpriteId, Sprites } from './sprites';
 import { drawFlashes, drawParticles, drawTexts } from './fxDraw';
 import { EndMode, FxState } from './fxState';
 import { TextCache } from './fxText';
+import { KeyHintCache, shouldDrawKeyHint } from './keyHints';
 import { CodeLog, codeLogRows, codeLogUnitWidth } from './codeLog';
 import { buildCrtOverlay } from './crtOverlay';
 import { VIEW_CONFIG } from './viewConfig';
@@ -21,6 +22,9 @@ export class BugSquashRenderer {
   private readonly box = newCellBox();
   private readonly fx = new FxState(createRng(VIEW_CONFIG.viewSeed ^ 0x9e3779b9));
   private readonly text = new TextCache();
+  private readonly keyHints = new KeyHintCache();
+  /** 칸 키가 한 번 수락된 뒤 true. 저장하지 않는다. */
+  private showKeyHints = false;
   private readonly crtOff: CrtOffState = { scaleX: 1, scaleY: 1, glow: 0 };
   /** 화면 글리치/CRT 꺼짐용 오프스크린 레이어 (보드 + fx만). 해당 연출 중에만 그린다. */
   private layer: HTMLCanvasElement | null = null;
@@ -66,6 +70,7 @@ export class BugSquashRenderer {
     this.crtBaked = null;
     this.sprites.build(this._board.size, dpr, [VIEW_CONFIG.smallGrid, DEFAULT_CONFIG.largeBoardSize]);
     this.text.build(this._board.size, dpr);
+    this.keyHints.build(this._board.size, dpr, [VIEW_CONFIG.smallGrid, DEFAULT_CONFIG.largeBoardSize]);
     // 픽셀 분해 조각 크기 = 스프라이트가 실제로 그리는 정수 블록 크기 (스프라이트 세트와 같은 식).
     for (const n of [VIEW_CONFIG.smallGrid, DEFAULT_CONFIG.largeBoardSize]) {
       const px = Math.max(8, Math.round((this._board.size / n) * dpr));
@@ -109,8 +114,12 @@ export class BugSquashRenderer {
   /** Reduced motion: 정책은 motionPolicy (글리치/CRT 꺼짐/타이핑 끔, 조각 축소, 확장은 페이드). */
   setReducedMotion(on: boolean): void { this.fx.setReducedMotion(on); }
 
+  /** 칸 키 힌트(왼쪽 위 타이틀바 자리의 키 글자) 켜기/끄기. 기본 꺼짐. */
+  setKeyHints(on: boolean): void { this.showKeyHints = on; }
+  get keyHintsOn(): boolean { return this.showKeyHints; }
+
   /** 폰트 로드 후 호출: 글로우 텍스트 캐시를 다시 만들게 한다. */
-  invalidateTextCache(): void { this.text.invalidateTextCache(); }
+  invalidateTextCache(): void { this.text.invalidateTextCache(); this.keyHints.invalidate(); }
 
   private drawCodeLog(ctx: CanvasRenderingContext2D): void {
     const L = VIEW_CONFIG.codeLog;
@@ -224,6 +233,13 @@ export class BugSquashRenderer {
       const cx0 = expanding ? box.cx - cw / 2 : snap(box.cx - cw / 2, dpr);
       const cy0 = expanding ? box.cy - cw / 2 : snap(box.cy - cw / 2, dpr);
       g.drawImage(occupied ? sp.cellBright : sp.cellNormal, cx0, cy0, cw, cw);
+      const hint = this.showKeyHints ? this.keyHints.get(grid, i) : undefined;
+      if (shouldDrawKeyHint(this.showKeyHints, hint)) {
+        const k = cw / this.keyHints.cellCss(grid);
+        const hx = cx0 + hint.x * k;
+        const hy = cy0 + hint.y * k;
+        g.drawImage(hint.canvas, expanding ? hx : snap(hx, dpr), expanding ? hy : snap(hy, dpr), hint.w * k, hint.h * k);
+      }
       if (!occupied) continue;
       const elapsed = cell.duration - cell.remaining;
       let s = popScale(elapsed, cell.remaining);
