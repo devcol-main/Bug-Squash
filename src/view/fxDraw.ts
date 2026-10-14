@@ -2,18 +2,12 @@
 import { easeOutCubic } from './anim';
 import { FxState, FX_COLORS, GhostMode, PopupStyle, ghostDuration } from './fxState';
 import { bannerScale } from './motionPolicy';
-import { roundRectPath } from './roundRectPath';
 import { TextCache, TextStyle } from './fxText';
 import type { BoardRect } from './layout';
 import type { Sprites } from './sprites';
 import { VIEW_CONFIG } from './viewConfig';
 
 const FX = VIEW_CONFIG.fx;
-
-function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  roundRectPath(ctx, x, y, w, h, r);
-}
 
 /** 오브젝트 아래(칸 위)에 그리는 것: 칸 플래시. */
 export function drawFlashes(ctx: CanvasRenderingContext2D, fx: FxState, b: BoardRect): void {
@@ -30,11 +24,10 @@ export function drawFlashes(ctx: CanvasRenderingContext2D, fx: FxState, b: Board
     ctx.fillStyle = FX_COLORS[f.color]!;
     ctx.strokeStyle = FX_COLORS[f.color]!;
     ctx.lineWidth = Math.max(1, FX.flashLineWidth * cell);
-    rr(ctx, x, y, side, side, side * VIEW_CONFIG.cellCorner);
     ctx.globalAlpha = a * FX.flashFillAlpha;
-    ctx.fill();
+    ctx.fillRect(x, y, side, side);
     ctx.globalAlpha = a;
-    ctx.stroke();
+    ctx.strokeRect(x, y, side, side);
   }
   ctx.globalAlpha = 1;
 }
@@ -46,7 +39,7 @@ export function drawGhosts(ctx: CanvasRenderingContext2D, fx: FxState, b: BoardR
     const g = items[i]!;
     if (!g.active) continue;
     const k = Math.min(1, g.t / ghostDuration(g.mode));
-    const img = sp.objects[g.sprite];
+    const img = sp.get(Math.round(1 / g.frac)).objects[g.sprite];
     if (!img) continue;
     const d = g.frac * b.size * (1 + 2 * VIEW_CONFIG.objectPad);
     const cx = b.x + g.u * b.size;

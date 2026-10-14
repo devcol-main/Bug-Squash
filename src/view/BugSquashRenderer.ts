@@ -1,28 +1,32 @@
 import { DEFAULT_CONFIG } from '../core/config';
 import { createRng } from '../core/rng';
 import type { BugSquashEvent, BugSquashLogic } from '../core/BugSquashLogic';
-import { expandAnimT, gridFlickerAlpha, popScale, smoothstep01 } from './anim';
+import { expandAnimT, popScale, smoothstep01 } from './anim';
 import { cellBox, computeBoardRect, expandCellBox, newCellBox, type BoardRect } from './layout';
-import { expandFadeAlphas } from './motionPolicy';
+import { crtFlickerValue, expandFadeAlphas } from './motionPolicy';
 import { shakeAmplitude } from './shake';
 import { SpriteId, Sprites } from './sprites';
 import { drawFlashes, drawGhosts, drawParticlesAndRings, drawTexts } from './fxDraw';
 import { FxState } from './fxState';
 import { TextCache } from './fxText';
-import { StarField } from './stars';
+import { CodeLog, codeLogRows, codeLogUnitWidth } from './codeLog';
+import { buildCrtOverlay } from './crtOverlay';
 import { VIEW_CONFIG } from './viewConfig';
 
 export class BugSquashRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly sprites = new Sprites();
-  private readonly stars = new StarField(createRng(VIEW_CONFIG.starSeed));
+  private readonly codeLog = new CodeLog(createRng(VIEW_CONFIG.viewSeed ^ 0x51ed270b));
   private readonly box = newCellBox();
-  private readonly fx = new FxState(createRng(VIEW_CONFIG.starSeed ^ 0x9e3779b9));
+  private readonly fx = new FxState(createRng(VIEW_CONFIG.viewSeed ^ 0x9e3779b9));
   private readonly text = new TextCache();
   private readonly shake = { x: 0, y: 0 };
   private readonly fade = { old: 1, next: 1 };
-  private gradient: CanvasGradient | null = null;
-  private grid: Path2D | null = null;
+  private crt: HTMLCanvasElement | null = null;
+  /** 깜박임을 끈 모드용: 기본 어둡기를 구워 넣은 오버레이 (처음 필요할 때 한 번 만든다). */
+  private crtBaked: HTMLCanvasElement | null = null;
+  private dpr = 1;
+  private unitW = 6;
   private cssW = 0;
   private cssH = 0;
   private time = 0;
@@ -38,7 +42,7 @@ export class BugSquashRenderer {
   /** 현재 보드 사각형 (CSS px). 입력 매핑용. */
   get board(): BoardRect { return this._board; }
 
-  /** 리사이즈/DPR 변경 시에만 호출. 그라디언트, 그리드, 스프라이트를 다시 만든다. */
+  /** 리사이즈/DPR 변경 시에만 호출. CRT 오버레이와 3x3/4x4 스프라이트 세트를 다시 만든다. */
   resize(): void {
     const dpr = Math.min(window.devicePixelRatio || 1, VIEW_CONFIG.maxDpr);
     const w = this.canvas.clientWidth;
@@ -50,12 +54,11 @@ export class BugSquashRenderer {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this._board = computeBoardRect(w, h);
 
-    const g = this.ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, VIEW_CONFIG.bgTop);
-    g.addColorStop(1, VIEW_CONFIG.bgBottom);
-    this.gradient = g;
-    this.grid = this.buildGrid();
-    this.sprites.build(this._board.size / 3, dpr);
+    this.dpr = dpr;
+    this.unitW = codeLogUnitWidth(w);
+    this.crt = buildCrtOverlay(w, h, dpr, false);
+    this.crtBaked = null;
+    this.sprites.build(this._board.size, dpr, [VIEW_CONFIG.smallGrid, DEFAULT_CONFIG.largeBoardSize]);
     this.text.build(this._board.size, dpr);
   }
 
@@ -76,56 +79,45 @@ export class BugSquashRenderer {
   /** 폰트 로드 후 호출: 글로우 텍스트 캐시를 다시 만들게 한다. */
   invalidateTextCache(): void { this.text.invalidateTextCache(); }
 
-  private buildGrid(): Path2D {
-    const c = VIEW_CONFIG;
-    const b = this._board;
-    const p = new Path2D();
-    const H = this.cssH;
-    const W = this.cssW;
-    const gy = b.y + b.size * c.gridHorizonRatio;
-    if (gy >= H) return p;
-    const cx = W / 2;
-    const n = c.gridHorizontalLines;
-    for (let k = 0; k < n; k++) {
-      const y = gy + Math.pow(k / (n - 1), c.gridCurve) * (H - gy);
-      p.moveTo(0, y);
-      p.lineTo(W, y);
+  private drawCodeLog(ctx: CanvasRenderingContext2D): void {
+    const L = VIEW_CONFIG.codeLog;
+    const log = this.codeLog;
+    const rows = codeLogRows(this.cssH);
+    const uw = this.unitW;
+    const typed = log.typedFraction();
+    ctx.fillStyle = L.color;
+    for (let k = 0; k < rows; k++) {
+      const slot = log.slotAt(k);
+      const y = this.cssH - (k + 1) * L.lineHeight + (L.lineHeight - L.barHeight) / 2;
+      // 맨 아래 줄은 타이핑: 전체 길이의 typed 비율까지만 그린다.
+      let remain = k === 0 ? Math.ceil(log.total[slot]! * typed) : 1e9;
+      if (remain <= 0) continue;
+      ctx.globalAlpha = log.alpha[slot]!;
+      let x = L.marginX + log.indent[slot]! * L.indentUnits * uw;
+      const n = log.barCount[slot]!;
+      // 들여쓰기 구간도 타이핑 길이에 포함된다.
+      remain -= log.indent[slot]! * L.indentUnits;
+      for (let b = 0; b < n && remain > 0; b++) {
+        const len = Math.min(log.barLen[slot * L.maxBars + b]!, remain);
+        ctx.fillRect(x, y, len * uw - 1, L.barHeight);
+        x += (log.barLen[slot * L.maxBars + b]! + 1) * uw;
+        remain -= log.barLen[slot * L.maxBars + b]! + 1;
+      }
     }
-    const top = c.gridSpacingTop * b.size;
-    const bottom = c.gridSpacingBottom * b.size;
-    const kmax = Math.ceil(cx / bottom) + 1;
-    for (let k = -kmax; k <= kmax; k++) {
-      p.moveTo(cx + k * top, gy);
-      p.lineTo(cx + k * bottom, H);
-    }
-    return p;
+    ctx.globalAlpha = 1;
   }
 
   render(logic: BugSquashLogic, dt: number): void {
     const ctx = this.ctx;
     const c = VIEW_CONFIG;
     this.time += dt;
-    this.stars.update(dt);
+    this.codeLog.update(dt);
     const fx = this.fx;
 
-    // 배경
-    ctx.fillStyle = this.gradient!;
+    // 배경: 단색 + 코드 로그 (한 겹, 보드 뒤)
+    ctx.fillStyle = c.bg;
     ctx.fillRect(0, 0, this.cssW, this.cssH);
-    const fld = this.stars;
-    for (let l = 0; l < fld.layerCount; l++) {
-      const cfg = c.stars[l]!;
-      ctx.globalAlpha = cfg.alpha;
-      ctx.fillStyle = cfg.color;
-      const end = fld.starts[l + 1]!;
-      for (let i = fld.starts[l]!; i < end; i++) {
-        ctx.fillRect(fld.u[i]! * this.cssW, fld.screenY(i, l, this.cssH), cfg.size, cfg.size);
-      }
-    }
-    ctx.strokeStyle = c.gridColor;
-    ctx.globalAlpha = gridFlickerAlpha(this.time);
-    ctx.lineWidth = 1;
-    if (this.grid) ctx.stroke(this.grid);
-    ctx.globalAlpha = 1;
+    this.drawCodeLog(ctx);
 
     // 보드 쪽은 화면 흔들림 적용 (배경은 고정)
     const bd = this._board;
@@ -140,7 +132,9 @@ export class BugSquashRenderer {
     const prog = smoothstep01(expandAnimT(logic.expandProgress, DEFAULT_CONFIG.expandPause, policy.expandDuration));
     const n = logic.cellCount;
     const box = this.box;
-    const sp = this.sprites;
+    const dpr = this.dpr;
+    const sp = this.sprites.get(grid);
+    const spSmall = this.sprites.get(c.smallGrid);
     const fadeExpand = expanding && policy.fadeExpand;
     if (fadeExpand) {
       // 3x3가 사라지고 4x4가 나타난다 (칸 이동 없음). 확장 중에는 오브젝트가 없다(core가 비움).
@@ -149,7 +143,7 @@ export class BugSquashRenderer {
       for (let j = 0; j < small * small; j++) {
         cellBox(this._board, small, j, box);
         ctx.globalAlpha = a.old;
-        ctx.drawImage(sp.cellNormal!, box.cx - box.size / 2, box.cy - box.size / 2, box.size, box.size);
+        ctx.drawImage(spSmall.cellNormal, snap(box.cx - box.size / 2, dpr), snap(box.cy - box.size / 2, dpr), box.size, box.size);
       }
     }
     for (let i = 0; i < n; i++) {
@@ -160,9 +154,12 @@ export class BugSquashRenderer {
       else cellBox(this._board, grid, i, box);
       const cell = logic.getCell(i);
       const occupied = cell.kind !== null;
-      const half = box.size / 2;
       ctx.globalAlpha = box.alpha;
-      ctx.drawImage((occupied ? sp.cellBright : sp.cellNormal)!, box.cx - half, box.cy - half, box.size, box.size);
+      // 정지 상태에서는 스프라이트 원래 크기로 디바이스 픽셀에 스냅해 그린다 (또렷하게). 확장 중에는 보간 크기.
+      const cw = expanding ? box.size : sp.cellPx / dpr;
+      const cx0 = expanding ? box.cx - cw / 2 : snap(box.cx - cw / 2, dpr);
+      const cy0 = expanding ? box.cy - cw / 2 : snap(box.cy - cw / 2, dpr);
+      ctx.drawImage(occupied ? sp.cellBright : sp.cellNormal, cx0, cy0, cw, cw);
       if (!occupied) continue;
       const elapsed = cell.duration - cell.remaining;
       let s = popScale(elapsed, cell.remaining);
@@ -181,16 +178,43 @@ export class BugSquashRenderer {
       const sh = fx.cellShake[i]!;
       if (sh >= 0) ox = shakeAmplitude(sh, c.fx.hitShakeDuration, box.size * c.fx.hitShakeAmp * policy.shakeScale) * Math.sin(sh * c.fx.hitShakeFreq);
       if (cell.kind === 'golden') fx.sparkle((box.cx - bd.x) / bd.size, (box.cy - bd.y) / bd.size, box.size / bd.size, dt);
-      const d = box.size * s * (1 + 2 * c.objectPad);
-      ctx.drawImage(sp.objects[id]!, box.cx + ox - d / 2, box.cy - d / 2, d, d);
+      // 스케일 1(정지)이면 원래 크기로 스냅, 팝/맥동/확장 중에는 분수 스케일(스무딩 허용).
+      const natural = s === 1 && !expanding && ox === 0;
+      const d = natural ? sp.surfPx / dpr : box.size * s * (1 + 2 * c.objectPad);
+      const left = natural ? snap(box.cx - d / 2, dpr) : box.cx + ox - d / 2;
+      const top = natural ? snap(box.cy - d / 2, dpr) : box.cy - d / 2;
+      ctx.drawImage(sp.objects[id]!, left, top, d, d);
+      if (cell.kind === 'golden' && (this.time % c.goldenCursor.period) < c.goldenCursor.period * c.goldenCursor.onRatio) {
+        // 깜박이는 터미널 커서 `_`: 버그 바로 아래, 스프라이트 블록 그리드에 스냅
+        const k = d / sp.surfPx;
+        const cur = sp.cursor;
+        ctx.fillStyle = c.goldenCursor.color;
+        ctx.fillRect(left + cur.x * k, top + cur.y * k, cur.w * k, cur.h * k);
+      }
     }
     ctx.globalAlpha = 1;
 
     drawFlashes(ctx, fx, bd);
-    drawGhosts(ctx, fx, bd, sp);
+    drawGhosts(ctx, fx, bd, this.sprites);
     drawParticlesAndRings(ctx, fx, bd);
     drawTexts(ctx, fx, bd, this.text);
     ctx.restore();
+
+    // CRT 오버레이 (맨 위): 스캔라인 + 비네팅. 깜박임을 끈 모드는 기본 어둡기를 오버레이에 구워 두어 전체 화면 fillRect 를 생략한다.
+    if (policy.crtFlicker) {
+      if (this.crt) ctx.drawImage(this.crt, 0, 0, this.cssW, this.cssH);
+      ctx.fillStyle = '#000';
+      ctx.globalAlpha = c.crt.flickerAmp + crtFlickerValue(policy, this.time);
+      ctx.fillRect(0, 0, this.cssW, this.cssH);
+      ctx.globalAlpha = 1;
+    } else {
+      this.crtBaked ??= buildCrtOverlay(this.cssW, this.cssH, this.dpr, true);
+      ctx.drawImage(this.crtBaked, 0, 0, this.cssW, this.cssH);
+    }
   }
 }
 
+/** CSS px 좌표를 디바이스 픽셀 경계에 스냅. */
+function snap(v: number, dpr: number): number {
+  return Math.round(v * dpr) / dpr;
+}

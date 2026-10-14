@@ -17,15 +17,18 @@ export interface MotionPolicy {
   expandDuration: number;
   /** false면 SCALING UP 배너는 확대 없이 페이드만. */
   bannerScaleAnim: boolean;
+  /** false면 CRT 밝기 깜박임을 끈다. */
+  crtFlicker: boolean;
 }
 
 const FULL: MotionPolicy = {
   shakeScale: 1, particleScale: 1, sparkleScale: 1, fadeExpand: false,
-  expandDuration: VIEW_CONFIG.expandAnimDuration, bannerScaleAnim: true,
+  expandDuration: VIEW_CONFIG.expandAnimDuration, bannerScaleAnim: true, crtFlicker: true,
 };
 const REDUCED: MotionPolicy = {
   shakeScale: R.shakeScale, particleScale: R.particleScale, sparkleScale: R.sparkleScale,
   fadeExpand: R.fadeExpand, expandDuration: R.expandFadeDuration, bannerScaleAnim: R.bannerScaleAnim,
+  crtFlicker: R.crtFlicker,
 };
 
 /** 축소 모드 여부 -> 정책. 같은 객체를 돌려주므로 매 프레임 불러도 할당이 없다. 수정하지 말 것. */
@@ -44,4 +47,11 @@ export function expandFadeAlphas(t: number, out: { old: number; next: number }):
 /** 배너 배율: 정책이 확대 애니메이션을 끄면 항상 1. scaleAnimated는 평소 계산값. */
 export function bannerScale(policy: Readonly<MotionPolicy>, scaleAnimated: number): number {
   return policy.bannerScaleAnim ? scaleAnimated : 1;
+}
+
+/** CRT 밝기 깜박임 값: [-flickerAmp, +flickerAmp]. 정책이 끄면 항상 0. 서로 다른 두 속도의 사인을 섞어 불규칙하게 보이게 한다. */
+export function crtFlickerValue(policy: Readonly<MotionPolicy>, time: number): number {
+  if (!policy.crtFlicker) return 0;
+  const c = VIEW_CONFIG.crt;
+  return c.flickerAmp * (0.6 * Math.sin(time * c.flickerSpeedA) + 0.4 * Math.sin(time * c.flickerSpeedB));
 }

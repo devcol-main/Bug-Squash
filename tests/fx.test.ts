@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { BugSquashEvent, BugSquashEventType, ObjectKind } from '../src/core/BugSquashLogic';
 import { createRng } from '../src/core/rng';
 import { GhostMode } from '../src/view/fxState';
-import { roundRectPath } from '../src/view/roundRectPath';
 import { FX_COLORS, FxState, cellCenter, popupText } from '../src/view/fxState';
 import { Pool } from '../src/view/pool';
 import { shakeAmplitude, shakeOffset } from '../src/view/shake';
@@ -200,28 +199,5 @@ describe('cell mapping and grid tracking', () => {
     fx.reset(4);
     fx.consume(buf(ev('missed', 5, 'bug', { lifeDelta: -1 })), 4);
     expect(fx.flashes.items.find((x) => x.active)!.u).toBeCloseTo(0.375);
-  });
-});
-
-describe('roundRectPath', () => {
-  function fakeCtx(withRoundRect: boolean) {
-    const calls: string[] = [];
-    const ctx: Record<string, unknown> = {
-      moveTo: () => calls.push('moveTo'),
-      arcTo: () => calls.push('arcTo'),
-      closePath: () => calls.push('closePath'),
-    };
-    if (withRoundRect) ctx.roundRect = () => calls.push('roundRect');
-    return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
-  }
-  it('roundRect available -> uses it', () => {
-    const { ctx, calls } = fakeCtx(true);
-    roundRectPath(ctx, 0, 0, 10, 10, 2);
-    expect(calls).toEqual(['roundRect']);
-  });
-  it('roundRect missing -> falls back to moveTo and four arcTo calls', () => {
-    const { ctx, calls } = fakeCtx(false);
-    roundRectPath(ctx, 0, 0, 10, 10, 2);
-    expect(calls).toEqual(['moveTo', 'arcTo', 'arcTo', 'arcTo', 'arcTo', 'closePath']);
   });
 });

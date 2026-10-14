@@ -3,7 +3,7 @@
 import { VIEW_CONFIG } from './viewConfig';
 
 const FX = VIEW_CONFIG.fx;
-export const FONT_FAMILY = '"Geist", system-ui, sans-serif';
+export const FONT_FAMILY = '"JetBrains Mono", ui-monospace, monospace';
 
 /** 텍스트 스타일 index. */
 export const TextStyle = { Score: 0, Golden: 1, Banner: 2 } as const;

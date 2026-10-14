@@ -11,7 +11,7 @@ export const UI_CONFIG = {
   /** 폰트 로드를 기다리는 최대 시간(ms). 넘기면 폴백 폰트로 그냥 시작한다. */
   fontTimeoutMs: 1500,
   /** document.fonts.load에 넘기는 폰트 스펙. */
-  fontSpec: '800 16px Geist',
+  fontSpec: '800 16px "JetBrains Mono"',
   bestKey: 'bugSquash.best',
   /** 공통 프로필로 옮기기 전의 옛 닉네임 키. 가져오기만 하고 쓰지 않는다. */
   legacyNicknameKey: 'bugSquash.nickname',

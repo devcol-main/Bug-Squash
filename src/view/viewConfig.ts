@@ -23,60 +23,83 @@ export const VIEW_CONFIG = {
   /** 좌우 여백 = 화면 폭 * 비율 (한쪽). */
   sideMarginRatio: 0.03,
   /** 그리기용 칸 inset (칸 한 변 비율, 한쪽). 입력 판정은 칸 전체 영역. */
-  cellInset: 0.06,
+  cellInset: 0.04,
   /** 확장 전 보드 칸 수 (보간 시작 레이아웃). core의 smallBoardSize와 같아야 한다. */
   smallGrid: DEFAULT_CONFIG.smallBoardSize,
-  cellCorner: 0.16,
-  cellStroke: 0.025,
+  /** 칸 외곽선 두께 (칸 한 변 비율). 각진 사각형(모서리 반경 0). */
+  cellStroke: 0.02,
 
-  // --- 색 ---
-  bgTop: '#07020F',
-  bgBottom: '#1D0634',
-  gridColor: '#FF3CC8',
-  gridAlpha: 0.25,
-  gridFlickerDepth: 0.4,
-  gridFlickerSpeed: 1.6,
-  /** 2 이상이어야 한다 (k / (n - 1)). */
-  gridHorizontalLines: 8,
-  gridCurve: 1.8,
-  /** 그리드 지평선 y = 보드 위 + 보드 높이 * 이 값 (보드 뒤쪽 하단). */
-  gridHorizonRatio: 0.6,
-  /** 소실점 쪽/바닥 쪽 세로선 간격 (보드 한 변 비율). */
-  gridSpacingTop: 0.06,
-  gridSpacingBottom: 0.26,
-
-  cellColor: '#33DDFF',
-  cellStrokeAlpha: 0.35,
-  cellFillAlpha: 0.06,
-  cellBrightStrokeAlpha: 0.95,
+  // --- 색 (레트로 터미널) ---
+  bg: '#050A07',
+  cellStrokeColor: '#1E5C38',
+  cellFillColor: '#0A140E',
+  /** 오브젝트가 있는 칸의 외곽선. */
+  cellActiveColor: '#39FF88',
   cellGlowBlur: 0.035,
+  /** 칸 왼쪽 위 타이틀바 장식 (칸 한 변 비율): 점 개수/크기/간격, 막대 길이/두께, 안쪽 여백. */
+  cellTitle: { dots: 3, dot: 0.026, gap: 0.022, barW: 0.26, barH: 0.016, pad: 0.03, brightAlpha: 0.75 },
 
   colors: {
-    bug: '#FF33CC',
-    hard: '#A64DFF',
-    golden: '#FFD166',
-    feature: '#33FFAA',
+    bug: '#FFB000',
+    hard: '#FF7A1A',
+    golden: '#FFF6D0',
+    feature: '#3FE0FF',
   },
-  /** 외곽선을 글로우 색보다 얼마나 밝게(흰색 혼합 비율) 할지. */
-  strokeLighten: 0.4,
 
-  // --- 오브젝트 (칸 한 변 비율) ---
-  /** 도형 단위 공간(중심 원점)에서 버그의 위(더듬이 끝)/아래(몸통)/좌우(다리) 범위. 그릴 때 세로 중심을 맞추도록 (top-bottom)/2 만큼 내려 그린다. */
-  bugTop: 0.84,
-  bugBottom: 0.57,
-  bugSide: 0.64,
-  /** 톱니바퀴 반경. */
-  gearExtent: 0.5,
-  bugFill: 0.42,
-  hardFill: 0.445,
-  featureFill: 0.6,
+  // --- 코드 로그 배경 ---
+  codeLog: {
+    color: '#39FF88',
+    alphaMin: 0.06,
+    alphaMax: 0.1,
+    /** 링 버퍼 최대 줄 수 (고정 크기). 화면에 보이는 줄 수는 이 값으로 제한된다. */
+    maxLines: 160,
+    /** 줄 높이/막대 높이/글자 단위 폭 (CSS px). */
+    lineHeight: 14,
+    barHeight: 6,
+    /** 글자 단위 폭은 화면 폭에 맞춘다: 가장 긴 줄(maxLineUnits)이 화면 폭의 lineFill 비율에 닿는다. */
+    lineFill: 0.8,
+    minUnitWidth: 3,
+    /** 들여쓰기 한 단계 = indentUnits 글자 단위. 단계 0..maxIndent. */
+    indentUnits: 3,
+    maxIndent: 4,
+    /** 막대 개수 1..maxBars, 막대 길이 minLen..maxLen 글자 단위 (막대 사이 1 단위 간격). */
+    maxBars: 5,
+    minLen: 2,
+    maxLen: 9,
+    /** 줄 단위 스텝: 이 간격(초)마다 모두 한 줄 위로. 맨 아래 줄은 간격의 typeFraction 동안 타이핑된다. */
+    stepInterval: 0.7,
+    typeFraction: 0.8,
+    /** 왼쪽 여백 (CSS px). */
+    marginX: 10,
+  },
+
+  // --- CRT 오버레이 ---
+  crt: {
+    /** 스캔라인 주기/두께 (CSS px, 그릴 때 디바이스 px로 round(x*dpr) 해서 DPR 1.5 무아레를 막는다)와 알파. */
+    scanPeriod: 2,
+    scanThickness: 1,
+    scanAlpha: 0.08,
+    /** 비네팅: 안쪽 반경(화면 대각선 절반 비율)에서 시작해 가장자리 알파까지. */
+    vignetteInner: 0.55,
+    vignetteAlpha: 0.5,
+    /** 밝기 깜박임 진폭(±)과 속도(rad/s). 검은 오버레이 알파 = flickerAmp + 깜박임값. */
+    flickerAmp: 0.02,
+    flickerSpeedA: 7.3,
+    flickerSpeedB: 17.9,
+  },
+
+  // --- 픽셀 오브젝트 (칸 한 변 비율) ---
+  /** 픽셀 블록 한 변. 모든 종류 공통이라 격자 크기가 곧 실제 크기가 된다. */
+  pixelBlock: 0.045,
   objectGlowBlur: 0.05,
+  /** 오브젝트 글로우 색 알파. */
+  objectGlowAlpha: 0.8,
   /** 오브젝트 스프라이트 표면의 한쪽 글로우 패딩 (칸 한 변 비율). */
   objectPad: 0.1,
-  /** 본체(외곽선 포함)가 차지할 수 있는, 그려진 칸 안쪽 반폭 대비 비율 상한. */
+  /** 본체가 차지할 수 있는, 그려진 칸 안쪽 반폭 대비 비율 상한. */
   objectMaxRatio: 0.8,
-  objectStroke: 0.07, // 오브젝트 단위 길이 대비
-  objectFillAlpha: 0.22,
+  /** 골든 커서 `_`: 깜박임 주기(초), 켜짐 비율, 폭(블록 수), 버그 아래 빈 줄 수(블록), 색. */
+  goldenCursor: { period: 0.8, onRatio: 0.5, cols: 4, gapRows: 1, color: '#FFF6D0' },
 
   /** 출현/퇴장 팝 시간(초). 퇴장은 노출 끝 이 시간 동안 역재생. */
   popDuration: 0.12,
@@ -107,7 +130,7 @@ export const VIEW_CONFIG = {
     flashLineWidth: 0.05,
     flashFillAlpha: 0.18,
     missFlashDuration: 0.18,
-    featureColor: '#FF4466',
+    featureColor: '#FF3B3B',
     /** 입자: 개수, 속도(칸 한 변/초), 수명, 크기(칸 한 변 비율). */
     catchParticles: 9,
     hardCatchParticles: 12,
@@ -139,14 +162,14 @@ export const VIEW_CONFIG = {
     /** 팝업 페이드 시작 (진행도). */
     popupFadeStart: 0.55,
     popupGlow: 0.35,
-    scoreColor: '#FFFFFF',
-    scoreGlow: '#FF3CC8',
-    goldenTextColor: '#FFE9A8',
-    goldenTextGlow: '#FFD166',
+    scoreColor: '#39FF88',
+    scoreGlow: '#39FF88',
+    goldenTextColor: '#FFF6D0',
+    goldenTextGlow: '#FFF6D0',
     /** 확장 배너. */
     bannerText: 'SCALING UP',
-    bannerColor: '#FFFFFF',
-    bannerGlow: '#33E1FF',
+    bannerColor: '#39FF88',
+    bannerGlow: '#39FF88',
     bannerDuration: 1.3,
     bannerFont: 0.12,
     bannerGlowRatio: 0.3,
@@ -172,14 +195,9 @@ export const VIEW_CONFIG = {
      * shakeScale 0 = 화면/칸 흔들림 없음. particleScale = 입자 개수와 크기 배율. sparkleScale = 골든 반짝임 빈도 배율.
      * fadeExpand = 보드 확장을 칸 이동 대신 짧은 페이드로 (expandFadeDuration초). bannerScaleAnim false = 배너는 페이드만.
      */
-    reduced: { shakeScale: 0, particleScale: 0.5, sparkleScale: 0.25, fadeExpand: true, expandFadeDuration: 0.25, bannerScaleAnim: false },
+    reduced: { shakeScale: 0, particleScale: 0.5, sparkleScale: 0.25, fadeExpand: true, expandFadeDuration: 0.25, bannerScaleAnim: false, crtFlicker: false },
   },
 
-  // --- 별 (뒤에서 앞 순서). drift: 화면 높이/초 ---
-  stars: [
-    { count: 36, drift: 0.006, size: 1, alpha: 0.35, color: '#B58CFF' },
-    { count: 24, drift: 0.012, size: 1.5, alpha: 0.5, color: '#8FE8FF' },
-    { count: 12, drift: 0.022, size: 2, alpha: 0.7, color: '#FFFFFF' },
-  ],
-  starSeed: 20240611,
+  /** view 전용 rng 시드 (core rng와 분리, 값은 임의). */
+  viewSeed: 20240611,
 } as const;

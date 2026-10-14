@@ -23,13 +23,6 @@ export function smoothstep01(t: number): number {
   return x * x * (3 - 2 * x);
 }
 
-/** 그리드 알파: [base*(1-depth), base] 범위에서 천천히 깜박임. */
-export function gridFlickerAlpha(time: number): number {
-  const c = VIEW_CONFIG;
-  const wave = 0.5 + 0.5 * Math.sin(time * c.gridFlickerSpeed);
-  return c.gridAlpha * (1 - c.gridFlickerDepth + c.gridFlickerDepth * wave);
-}
-
 /** 확장 진행도(core, 정지 시간 전체 기준 0..1) -> 재배치 구간(animDur초) 기준 0..1. 나머지는 4x4 유지. */
 export function expandAnimT(progress: number, pause: number, animDur: number): number {
   if (animDur <= 0) return 1;
