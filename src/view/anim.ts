@@ -35,3 +35,8 @@ export function expandAnimT(progress: number, pause: number, animDur: number): n
   if (animDur <= 0) return 1;
   return Math.min(1, Math.max(0, (progress * pause) / animDur));
 }
+
+export function easeOutCubic(t: number): number {
+  const k = 1 - Math.min(1, Math.max(0, t));
+  return 1 - k * k * k;
+}

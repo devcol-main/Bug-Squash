@@ -9,6 +9,8 @@ declare global {
     __bugSquash?: {
       logic(): BugSquashLogic;
       restart(seed?: number, overrides?: Partial<BugSquashConfig>): BugSquashLogic;
+      /** logic.tap(cell) 후 연출까지 재생한다. */
+      tap(cell: number): void;
     };
   }
 }
@@ -32,8 +34,10 @@ if (canvas instanceof HTMLCanvasElement) {
       restart: (seed, overrides) => {
         overTime = 0;
         logic = newLogic(seed, overrides);
+        renderer.resetFx(logic);
         return logic;
       },
+      tap: (cell) => renderer.consume(logic.tap(cell), logic),
     };
   }
   let last = performance.now();
@@ -41,13 +45,15 @@ if (canvas instanceof HTMLCanvasElement) {
   const frame = (now: number): void => {
     const dt = Math.min(MAX_DT, Math.max(0, (now - last) / 1000));
     last = now;
-    logic.update(dt);
+    renderer.advanceFx(dt);
+    renderer.consume(logic.update(dt), logic);
     renderer.render(logic, dt);
     // TEMP: 7번에서 UI 흐름으로 교체
     if (logic.isGameOver) {
       overTime += dt;
       if (overTime >= TEMP_RESTART_DELAY) {
         logic = newLogic();
+        renderer.resetFx(logic);
         overTime = 0;
       }
     }

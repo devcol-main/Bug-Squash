@@ -1,5 +1,6 @@
 // 칸/오브젝트 스프라이트 캐시. 리사이즈/DPR 변경 시에만 오프스크린에 그린다 (shadowBlur는 build 안에서만).
 // 모든 스프라이트는 "칸 전체 영역" 정사각형(refSize CSS px)을 덮는다. 그릴 때 칸 크기로 스케일한다.
+import { roundRectPath } from './roundRectPath';
 import { bugOffsetY } from './objectBounds';
 import { VIEW_CONFIG } from './viewConfig';
 
@@ -73,7 +74,7 @@ export class Sprites {
     const lw = Math.max(1, px * c.cellStroke);
     const w = px - inset * 2;
     g.beginPath();
-    g.roundRect(inset + lw / 2, inset + lw / 2, w - lw, w - lw, px * c.cellCorner);
+    roundRectPath(g, inset + lw / 2, inset + lw / 2, w - lw, w - lw, px * c.cellCorner);
     g.fillStyle = rgba(c.cellColor, c.cellFillAlpha);
     g.fill();
     if (bright) {

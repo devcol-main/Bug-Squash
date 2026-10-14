@@ -1,9 +1,13 @@
 import { DEFAULT_CONFIG } from '../core/config';
 import { createRng } from '../core/rng';
-import type { BugSquashLogic } from '../core/BugSquashLogic';
+import type { BugSquashEvent, BugSquashLogic } from '../core/BugSquashLogic';
 import { expandAnimT, gridFlickerAlpha, popScale, smoothstep01 } from './anim';
 import { cellBox, computeBoardRect, expandCellBox, newCellBox, type BoardRect } from './layout';
+import { shakeAmplitude } from './shake';
 import { SpriteId, Sprites } from './sprites';
+import { drawFlashes, drawGhosts, drawParticlesAndRings, drawTexts } from './fxDraw';
+import { FxState } from './fxState';
+import { TextCache } from './fxText';
 import { StarField } from './stars';
 import { VIEW_CONFIG } from './viewConfig';
 
@@ -12,6 +16,9 @@ export class BugSquashRenderer {
   private readonly sprites = new Sprites();
   private readonly stars = new StarField(createRng(VIEW_CONFIG.starSeed));
   private readonly box = newCellBox();
+  private readonly fx = new FxState(createRng(VIEW_CONFIG.starSeed ^ 0x9e3779b9));
+  private readonly text = new TextCache();
+  private readonly shake = { x: 0, y: 0 };
   private gradient: CanvasGradient | null = null;
   private grid: Path2D | null = null;
   private cssW = 0;
@@ -47,7 +54,25 @@ export class BugSquashRenderer {
     this.gradient = g;
     this.grid = this.buildGrid();
     this.sprites.build(this._board.size / 3, dpr);
+    this.text.build(this._board.size, dpr);
   }
+
+  /** core 이벤트(update/tap 결과)를 연출로 바꾼다. 버퍼는 이 호출 안에서만 읽는다. */
+  consume(events: { length: number; at(i: number): BugSquashEvent }, logic: BugSquashLogic): void {
+    this.fx.consume(events, logic.boardSize);
+  }
+
+  /** 기존 연출을 dt만큼 진행. 새 이벤트 consume 전에 부른다 (새 연출이 첫 프레임에 t=0 으로 그려지게). */
+  advanceFx(dt: number): void { this.fx.update(dt); }
+
+  /** 새 게임 시작 시 남은 연출을 비우고 시작 그리드 크기를 맞춘다. */
+  resetFx(logic: BugSquashLogic): void { this.fx.reset(logic.boardSize); }
+
+  /** Reduced motion 훅 (실제 축소 동작은 8번). */
+  setReducedMotion(on: boolean): void { this.fx.setReducedMotion(on); }
+
+  /** 폰트 로드 후 호출: 글로우 텍스트 캐시를 다시 만들게 한다. */
+  invalidateTextCache(): void { this.text.invalidateTextCache(); }
 
   private buildGrid(): Path2D {
     const c = VIEW_CONFIG;
@@ -79,6 +104,7 @@ export class BugSquashRenderer {
     const c = VIEW_CONFIG;
     this.time += dt;
     this.stars.update(dt);
+    const fx = this.fx;
 
     // 배경
     ctx.fillStyle = this.gradient!;
@@ -98,6 +124,12 @@ export class BugSquashRenderer {
     ctx.lineWidth = 1;
     if (this.grid) ctx.stroke(this.grid);
     ctx.globalAlpha = 1;
+
+    // 보드 쪽은 화면 흔들림 적용 (배경은 고정)
+    const bd = this._board;
+    fx.screenShake(this.shake);
+    ctx.save();
+    ctx.translate(this.shake.x * bd.size, this.shake.y * bd.size);
 
     // 칸 + 오브젝트
     const grid = logic.boardSize;
@@ -128,10 +160,20 @@ export class BugSquashRenderer {
         case 'feature': id = SpriteId.Feature; break;
         default: id = SpriteId.Bug;
       }
+      let ox = 0;
+      const sh = fx.cellShake[i]!;
+      if (sh >= 0) ox = shakeAmplitude(sh, c.fx.hitShakeDuration, box.size * c.fx.hitShakeAmp) * Math.sin(sh * c.fx.hitShakeFreq);
+      if (cell.kind === 'golden') fx.sparkle((box.cx - bd.x) / bd.size, (box.cy - bd.y) / bd.size, box.size / bd.size, dt);
       const d = box.size * s * (1 + 2 * c.objectPad);
-      ctx.drawImage(sp.objects[id]!, box.cx - d / 2, box.cy - d / 2, d, d);
+      ctx.drawImage(sp.objects[id]!, box.cx + ox - d / 2, box.cy - d / 2, d, d);
     }
     ctx.globalAlpha = 1;
+
+    drawFlashes(ctx, fx, bd);
+    drawGhosts(ctx, fx, bd, sp);
+    drawParticlesAndRings(ctx, fx, bd);
+    drawTexts(ctx, fx, bd, this.text);
+    ctx.restore();
   }
 }
 

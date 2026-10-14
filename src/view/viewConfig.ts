@@ -77,6 +77,88 @@ export const VIEW_CONFIG = {
   goldenPulseAmp: 0.06,
   goldenPulseSpeed: 9,
 
+  // --- VFX (시간 초, 길이는 보드 한 변 / 칸 한 변 비율) ---
+  fx: {
+    /** 풀 크기. 가득 차면 가장 오래 전에 배정한 항목을 덮어쓴다. */
+    particlePool: 160,
+    popupPool: 16,
+    ringPool: 8,
+    flashPool: 16,
+    ghostPool: 16,
+    /** 잡기 squash: 지속(초), 최종 가로/세로 배율. */
+    squashDuration: 0.14,
+    squashX: 1.45,
+    squashY: 0.25,
+    /** 기능 탭 톱니 소멸: 지속, 최종 배율, 회전(rad). */
+    gearDuration: 0.22,
+    gearEndScale: 0.2,
+    gearSpin: 1.6,
+    /** 칸 외곽선 플래시. */
+    flashDuration: 0.22,
+    flashLineWidth: 0.05,
+    flashFillAlpha: 0.18,
+    missFlashDuration: 0.18,
+    featureColor: '#FF4466',
+    /** 입자: 개수, 속도(칸 한 변/초), 수명, 크기(칸 한 변 비율). */
+    catchParticles: 9,
+    hardCatchParticles: 12,
+    goldenParticles: 20,
+    particleSpeedMin: 0.9,
+    particleSpeedMax: 2.2,
+    particleLife: 0.45,
+    particleDrag: 3.2,
+    particleSize: 0.07,
+    /** 골든 반짝임: 초당 개수, 수명, 크기, 퍼짐(칸 비율). */
+    sparkleRate: 14,
+    sparkleLife: 0.55,
+    sparkleSize: 0.05,
+    sparkleSpread: 0.42,
+    sparkleRise: 0.35,
+    /** 링 파동. */
+    ringDuration: 0.5,
+    ringStart: 0.25,
+    ringEnd: 1.3,
+    ringLineWidth: 0.06,
+    /** 점수 팝업: 지속, 떠오르는 거리(칸 비율), 글자 높이(칸 비율), 글로우(글자 높이 비율). */
+    popupDuration: 0.8,
+    popupRise: 0.7,
+    popupFont: 0.27,
+    /** 팝업 텍스트 폭 상한 (칸 폭 비율). */
+    popupMaxWidth: 0.9,
+    /** 팝업 페이드 시작 (진행도). */
+    popupFadeStart: 0.55,
+    popupGlow: 0.35,
+    scoreColor: '#FFFFFF',
+    scoreGlow: '#FF3CC8',
+    goldenTextColor: '#FFE9A8',
+    goldenTextGlow: '#FFD166',
+    /** 확장 배너. */
+    bannerText: 'SCALING UP',
+    bannerColor: '#FFFFFF',
+    bannerGlow: '#33E1FF',
+    bannerDuration: 1.3,
+    bannerFont: 0.12,
+    bannerGlowRatio: 0.3,
+    /** 배너 진행도 구간: 페이드 인 끝, 페이드 아웃 길이, 시작 배율, 배율 복귀 끝. */
+    bannerFadeIn: 0.12,
+    bannerFadeOut: 0.3,
+    bannerScaleStart: 0.85,
+    bannerScaleEnd: 0.25,
+    /** 미리 만들어 둘 텍스트. */
+    scoreTexts: ['+10', '+20', '+25', '+30', '+40', '+50', '+75', '+100', '+150', '+200'],
+    goldenTexts: ['+1 LIFE', '+50', '+100', '+150', '+200'],
+    /** 단단한 버그 1타 흔들림: 지속, 진폭(칸 비율), 진동 속도(rad/s). */
+    hitShakeDuration: 0.2,
+    hitShakeAmp: 0.07,
+    hitShakeFreq: 60,
+    /** 화면 흔들림: 지속, 진폭(보드 한 변 비율), 진동 속도. */
+    screenShakeFeature: { duration: 0.3, amp: 0.018 },
+    screenShakeGameOver: { duration: 0.45, amp: 0.026 },
+    screenShakeFreqX: 71,
+    screenShakeFreqY: 53,
+    /** Reduced motion 훅 값 (적용은 8번에서 연결). */
+    reduced: { shakeScale: 0.25, particleScale: 0.5, instantExpand: true },
+  },
 
   // --- 별 (뒤에서 앞 순서). drift: 화면 높이/초 ---
   stars: [
