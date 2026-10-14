@@ -1,7 +1,8 @@
 import { keyToCell } from './keyToCell';
 
 export interface KeyContext {
-  phase: string;
+  /** 플레이 중인가 (타이틀/게임 오버가 아님). ui 의 phase 타입에 의존하지 않도록 boolean 으로 받는다. */
+  playing: boolean;
   optionsOpen: boolean;
   /** 닉네임 입력칸 등 글자를 치는 요소에 포커스가 있는가 */
   textTarget: boolean;
@@ -14,7 +15,7 @@ export interface KeyContext {
  * 입력칸이나 버튼에 포커스가 없을 때만. (기존 Space 처리와 같은 기준)
  */
 export function shouldAcceptCellKey(s: KeyContext): boolean {
-  return s.phase === 'playing' && !s.optionsOpen && !s.textTarget && !s.buttonTarget;
+  return s.playing && !s.optionsOpen && !s.textTarget && !s.buttonTarget;
 }
 
 export interface CellSink {

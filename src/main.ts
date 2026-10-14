@@ -19,6 +19,7 @@ import { watchDpr } from './ui/dprWatcher';
 import { onMediaChange } from './ui/mediaQuery';
 import { releaseFocus } from './ui/focusRelease';
 import { waitForFont } from './ui/fonts';
+import { OverlayDelay } from './ui/overlayDelay';
 import { UI_CONFIG } from './ui/uiConfig';
 import './ui/ui.css';
 
@@ -118,7 +119,7 @@ if (canvas instanceof HTMLCanvasElement) {
   };
 
   /** CRT 꺼짐이 끝나기를 기다리는 게임 오버 오버레이. 재시작하면 취소된다. */
-  let overlay: { remaining: number; isNewBest: boolean; round: number } | null = null;
+  const overlay = new OverlayDelay<boolean>(); // 값 = 신기록 여부
 
   const onGameOver = (): void => {
     if (!flow.endGame()) return;
@@ -129,7 +130,7 @@ if (canvas instanceof HTMLCanvasElement) {
     result.time = logic.time;
     const isNewBest = best.submit(result.score);
     // 오버레이는 CRT 꺼짐(reduced이면 페이드)이 끝난 뒤에 보인다. flow 상태와 입력 잠금(0.6초)은 바로 시작한다.
-    overlay = { remaining: renderer.endDelay, isNewBest, round: flow.round };
+    overlay.start(renderer.endDelay, flow.round, isNewBest);
   };
 
   /** 지연된 게임 오버 오버레이를 실제로 띄운다. */
@@ -175,7 +176,7 @@ if (canvas instanceof HTMLCanvasElement) {
     // 포커스가 남은 닉네임 입력/버튼 때문에 Space와 칸 키가 막히지 않게
     const active = document.activeElement;
     if (active instanceof HTMLElement && (isTextTarget(active) || isButtonTarget(active))) active.blur();
-    overlay = null;
+    overlay.cancel();
     logic = newLogic(seed, overrides);
     renderer.resetFx(logic);
     audio.unduck();
@@ -238,7 +239,7 @@ if (canvas instanceof HTMLCanvasElement) {
     window,
     { push: (cell) => { renderer.setKeyHints(true); return input.pushCell(cell); } },
     () => logic.boardSize,
-    (e) => shouldAcceptCellKey({ phase: flow.phase, optionsOpen: flow.optionsOpen, textTarget: isTextTarget(e.target), buttonTarget: isButtonTarget(e.target) }),
+    (e) => shouldAcceptCellKey({ playing: flow.phase === 'playing', optionsOpen: flow.optionsOpen, textTarget: isTextTarget(e.target), buttonTarget: isButtonTarget(e.target) }),
   );
   window.addEventListener('keydown', (e) => {
     if (flow.optionsOpen && e.code === 'Escape') {
@@ -400,14 +401,7 @@ if (canvas instanceof HTMLCanvasElement) {
     }
     renderer.advanceFx(dt);
     flow.update(dt);
-    if (overlay) {
-      overlay.remaining -= dt;
-      if (overlay.remaining <= 0) {
-        const o = overlay;
-        overlay = null;
-        if (flow.round === o.round && flow.phase === 'gameOver') showGameOverOverlay(o.isNewBest);
-      }
-    }
+    overlay.update(dt, flow.round, flow.phase === 'gameOver', showGameOverOverlay);
     if (flow.phase === 'playing') {
       input.drain(onCell);
       if (flow.phase === 'playing') dispatch(logic.update(dt)); // drain 중 게임 오버가 났으면 건너뜀

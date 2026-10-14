@@ -40,8 +40,12 @@ export const VIEW_CONFIG = {
   /** 칸 왼쪽 위 타이틀바 장식 (칸 한 변 비율): 점 개수/크기/간격, 막대 길이/두께, 안쪽 여백. */
   cellTitle: { dots: 3, dot: 0.026, gap: 0.022, barW: 0.26, barH: 0.016, pad: 0.03, brightAlpha: 0.75 },
 
-  /** 키 힌트 글자: 어두운 녹색(--term-dim-text), 폰트 크기(칸 한 변 비율, 최소 CSS px), 타이틀바 막대 끝과 글자 사이 최소 간격(칸 한 변 비율, 디바이스 px). */
-  keyHint: { color: '#3A9A62', font: 0.12, minFont: 9, gapMin: 0.06, gapMinPx: 2 },
+  /**
+   * 키 힌트 글자: 어두운 녹색(--term-dim-text), 폰트 크기(칸 한 변 비율, 최소 CSS px), 타이틀바 막대 끝과 글자 사이 최소 간격(칸 한 변 비율, 디바이스 px).
+   * widthPad = 글자 폭 여유(CSS px), lineHeight = 스프라이트 높이(폰트 크기 배율),
+   * centerEm = 'top' 기준선에서 글자 가운데까지(폰트 크기 배율. 윗 여백 약 0.15em + 대문자 높이 절반), topGapPx = 외곽선 아래 최소 여백(디바이스 px).
+   */
+  keyHint: { color: '#3A9A62', font: 0.12, minFont: 9, gapMin: 0.06, gapMinPx: 2, widthPad: 1, lineHeight: 1.2, centerEm: 0.5, topGapPx: 1 },
 
   colors: {
     bug: '#FFB000',
@@ -188,7 +192,10 @@ export const VIEW_CONFIG = {
     screenGlitchBands: 5,
     screenGlitchAmp: 0.045,
     screenGlitchShiftChance: 0.7,
-    /** 띠 경계 지터 (띠 폭 비율, 한쪽). 0.5 미만이어야 경계가 뒤집히지 않는다. */
+    /**
+     * 띠 경계 지터 (띠 폭 비율, 한쪽). 반드시 0.5 미만이어야 한다:
+     * 경계 k = (k + j) / n, j in [-J, J] 이므로 이웃 경계 간격이 최소 (1 - 2J) / n > 0 이어야 단조 증가한다. (fx.test.ts 가 값을 단언)
+     */
     screenGlitchEdgeJitter: 0.3,
     /** 화면 글리치/CRT 꺼짐 레이어가 보드 위아래로 더 덮는 영역 (칸 한 변 비율. 팝업 여유). */
     layerPad: 0.4,

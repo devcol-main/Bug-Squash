@@ -52,11 +52,26 @@ describe('life blocks', () => {
 });
 
 describe('sound button spacing', () => {
-  it('both sound labels keep at least 4u from the BUG SQUASH text', () => {
-    expect(muteLogoGapU(muteButtonText(false))).toBeGreaterThanOrEqual(MUTE_LAYOUT.minGapU);
-    expect(muteLogoGapU(muteButtonText(true))).toBeGreaterThanOrEqual(MUTE_LAYOUT.minGapU);
+  // u = min(1vw, 0.5625vh): 375px 폭 세로 폰 3.75, 320px 폭 3.2, 높이 360px 가로 폰 약 2.03, 여유를 둔 2
+  const uPxs = [3.75, 3.2, 2.03, 2];
+  it('both sound labels keep at least 4u from the BUG SQUASH text for realistic u sizes', () => {
+    for (const uPx of uPxs) {
+      for (const muted of [false, true]) {
+        expect(muteLogoGapU(muteButtonText(muted), uPx)).toBeGreaterThanOrEqual(MUTE_LAYOUT.minGapU);
+      }
+    }
+  });
+  it('the button border (2px) narrows the gap, more when u is small', () => {
+    const label = muteButtonText(true);
+    const wide = muteLogoGapU(label, 1000); // 테두리 영향 거의 없음
+    const narrow = muteLogoGapU(label, 2);
+    expect(wide - narrow).toBeCloseTo(MUTE_LAYOUT.borderPx / 2 - MUTE_LAYOUT.borderPx / 1000, 9);
+  });
+  it('safeRightU inset shrinks the gap one-to-one', () => {
+    const label = muteButtonText(true);
+    expect(muteLogoGapU(label, 3.75, 0) - muteLogoGapU(label, 3.75, 1.5)).toBeCloseTo(1.5, 9);
   });
   it('the old spaced bracket label would have been too close', () => {
-    expect(muteLogoGapU('[ Sound: off ]')).toBeLessThan(MUTE_LAYOUT.minGapU);
+    expect(muteLogoGapU('[ Sound: off ]', 3.75)).toBeLessThan(MUTE_LAYOUT.minGapU);
   });
 });

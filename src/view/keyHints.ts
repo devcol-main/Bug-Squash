@@ -2,6 +2,7 @@
 // 프레임에서는 get 조회 + drawImage 만 한다. 글자 크기는 칸 크기에 비례하되 최소 minFont CSS px.
 import { cellToKeyLabel } from '../input/keyToCell';
 import { FONT_FAMILY } from './fxText';
+import { cellMetricsPx, cellSpritePx, cellTitleMetricsPx } from './objectBounds';
 import { VIEW_CONFIG } from './viewConfig';
 
 export interface KeyHintSprite {
@@ -69,13 +70,12 @@ export class KeyHintCache {
 
   private draw(label: string, cellCss: number, dpr: number): KeyHintSprite {
     const K = VIEW_CONFIG.keyHint;
-    const T = VIEW_CONFIG.cellTitle;
     const fontPx = keyHintFontPx(cellCss);
     const font = `bold ${fontPx}px ${FONT_FAMILY}`;
     const measure = (this.measureCtx ??= this.create(1, 1).getContext('2d') as CanvasRenderingContext2D);
     measure.font = font;
-    const w = Math.ceil(measure.measureText(label).width) + 1;
-    const h = Math.ceil(fontPx * 1.2);
+    const w = Math.ceil(measure.measureText(label).width) + K.widthPad;
+    const h = Math.ceil(fontPx * K.lineHeight);
     const surf = this.create(Math.ceil(w * dpr), Math.ceil(h * dpr));
     const g = surf.getContext('2d') as CanvasRenderingContext2D;
     g.scale(dpr, dpr);
@@ -84,11 +84,14 @@ export class KeyHintCache {
     g.textBaseline = 'top';
     g.fillStyle = K.color;
     g.fillText(label, 0, 0);
-    // x: 막대 끝 + 최소 간격. y: 글자 중심(윗 여백 약 0.15em + 대문자 높이 절반 = 약 0.5em)을 점 줄 중심에 맞추되 외곽선 아래로 내려온다.
-    const barEnd = VIEW_CONFIG.cellInset + VIEW_CONFIG.cellStroke + T.pad + T.dots * (T.dot + T.gap) + T.barW;
-    const x = cellCss * barEnd + Math.max(cellCss * K.gapMin, K.gapMinPx / dpr);
-    const rowCenter = cellCss * (VIEW_CONFIG.cellInset + VIEW_CONFIG.cellStroke + T.pad + T.dot / 2);
-    const y = Math.max(rowCenter - fontPx * 0.5, cellCss * (VIEW_CONFIG.cellInset + VIEW_CONFIG.cellStroke) + 1 / dpr);
+    // x: 칸 스프라이트(sprites.ts)가 실제로 그리는 막대 끝 + 최소 간격. y: 글자 중심을 점 줄 중심에 맞추되 외곽선 아래로 내려온다.
+    const px = cellSpritePx(cellCss, dpr);
+    const m = cellTitleMetricsPx(px);
+    const x = (cellCss * m.barEnd) / px + Math.max(cellCss * K.gapMin, K.gapMinPx / dpr);
+    const rowCenter = (cellCss * (m.startY + m.dot / 2)) / px;
+    const { inset, lw } = cellMetricsPx(px);
+    const outline = (cellCss * (inset + lw)) / px; // 실제로 그려지는(반올림된) 외곽선 안쪽 끝
+    const y = Math.max(rowCenter - fontPx * K.centerEm, outline + K.topGapPx / dpr);
     return { canvas: surf, x, y, w, h };
   }
 }

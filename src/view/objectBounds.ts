@@ -40,6 +40,28 @@ export function cellMetricsPx(px: number): { inset: number; lw: number } {
   return { inset: Math.round(px * VIEW_CONFIG.cellInset), lw: Math.max(1, Math.round(px * VIEW_CONFIG.cellStroke)) };
 }
 
+/** 칸 스프라이트 한 변 (디바이스 px). sprites 의 세트 생성과 키 힌트 위치 계산이 함께 쓴다. */
+export function cellSpritePx(cellCss: number, dpr: number): number {
+  return Math.max(8, Math.round(cellCss * dpr));
+}
+
+/**
+ * 칸 타이틀바 장식(점 + 막대)의 정수 치수와 막대 끝 x (칸 스프라이트 한 변 px 디바이스 px 기준, 칸 왼쪽 위에서부터).
+ * sprites 가 그리는 값과 키 힌트 위치 계산/테스트가 같은 반올림을 쓰도록 공유한다.
+ */
+export function cellTitleMetricsPx(px: number): { dot: number; gap: number; barH: number; barW: number; pad: number; startX: number; startY: number; barEnd: number } {
+  const t = VIEW_CONFIG.cellTitle;
+  const { inset, lw } = cellMetricsPx(px);
+  const dot = Math.max(1, Math.round(px * t.dot));
+  const gap = Math.max(1, Math.round(px * t.gap));
+  const barH = Math.max(1, Math.round(px * t.barH));
+  const barW = Math.round(px * t.barW);
+  const pad = Math.round(px * t.pad);
+  const startX = inset + lw + pad;
+  const startY = inset + lw + pad;
+  return { dot, gap, barH, barW, pad, startX, startY, barEnd: startX + t.dots * (dot + gap) + barW };
+}
+
 /** 실제로 그리는 블록과 칸 외곽선 기준의 범위 비율 (칸 스프라이트 한 변이 px 디바이스 px일 때). */
 export function objectBoundsRatioPx(kind: BoundsKind, px: number, out: Bounds): Bounds {
   const g = gridOf(kind);

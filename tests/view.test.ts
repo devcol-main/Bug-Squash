@@ -287,6 +287,17 @@ describe('pixel art grids', () => {
   it('hard grid -> the middle of the shell is solid, only the 1-block ring is empty and closed', () => {
     const mid = HARD_GRID.slice(8, 11).map((r) => r.slice(2, gridCols(HARD_GRID) - 2));
     for (const r of mid) expect(r).toMatch(/^#+$/);
+    // 링: 8~10행의 가장자리 안쪽 1칸만 비어 있고, 위/아래/바깥/안쪽이 모두 채워져 닫혀 있다.
+    const C = gridCols(HARD_GRID);
+    for (const r of [8, 9, 10]) {
+      const row = HARD_GRID[r]!;
+      expect([row[0], row[1], row[2]]).toEqual(['#', '.', '#']);
+      expect([row[C - 3], row[C - 2], row[C - 1]]).toEqual(['#', '.', '#']);
+    }
+    for (const c of [1, C - 2]) {
+      expect(HARD_GRID[7]![c]).toBe('#');
+      expect(HARD_GRID[11]![c]).toBe('#');
+    }
   });
   it('cracked hard grid -> the crack opens the middle of the shell', () => {
     expect(HARD_CRACKED_GRID[8]!.slice(5, 7)).toBe('..');

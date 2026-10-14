@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { BugSquashEvent } from '../src/core/BugSquashLogic';
 import { cellToKeyLabel } from '../src/input/keyToCell';
 import { vibrationForEvent } from '../src/ui/vibrationCue';
+import { cellSpritePx, cellTitleMetricsPx } from '../src/view/objectBounds';
 import { KeyHintCache, keyHintFontPx, keyHintLabels, shouldDrawKeyHint } from '../src/view/keyHints';
 import { VIEW_CONFIG } from '../src/view/viewConfig';
 
@@ -53,16 +54,41 @@ describe('key hint sprites', () => {
     expect(keyHintFontPx(200)).toBeCloseTo(200 * VIEW_CONFIG.keyHint.font);
   });
   it('hint text starts at least 2 device px right of the title bar end, below the outline', () => {
-    const t = VIEW_CONFIG.cellTitle;
-    const barEnd = VIEW_CONFIG.cellInset + VIEW_CONFIG.cellStroke + t.pad + t.dots * (t.dot + t.gap) + t.barW;
-    for (const dpr of [1, 2]) {
+    for (const dpr of [1, 1.5, 2]) {
       const c = new KeyHintCache(fakeCreate);
       c.build(280, dpr, [4]);
       const s = c.get(4, 0)!;
-      expect(s.x - 70 * barEnd).toBeGreaterThanOrEqual(2 / dpr);
+      // sprites.ts 와 같은 반올림(공유 함수)으로 계산한 막대 끝 (CSS px)
+      const barEndCss = cellTitleMetricsPx(cellSpritePx(70, dpr)).barEnd / dpr;
+      expect(s.x - barEndCss).toBeGreaterThanOrEqual(2 / dpr - 1e-9);
       expect(s.y).toBeGreaterThanOrEqual(70 * (VIEW_CONFIG.cellInset + VIEW_CONFIG.cellStroke));
       expect(s.x + s.w).toBeLessThan(70);
     }
+  });
+  it('non-integer cell device size (rounding changes the bar end) -> still keeps the 2 device px gap', () => {
+    // 칸 70.3 css px * 1.5 = 105.45 -> 105 로 반올림
+    const dpr = 1.5;
+    const board = 70.3 * 4;
+    expect(70.3 * dpr).not.toBe(cellSpritePx(70.3, dpr));
+    const c = new KeyHintCache(fakeCreate);
+    c.build(board, dpr, [4]);
+    const s = c.get(4, 0)!;
+    const px = cellSpritePx(board / 4, dpr);
+    const m = cellTitleMetricsPx(px);
+    // 힌트 x 는 칸 css 폭 비율이고 그릴 때 sprites 의 칸 크기(px/dpr)로 스케일된다
+    const k = px / dpr / (board / 4);
+    expect(s.x * k - m.barEnd / dpr).toBeGreaterThanOrEqual(2 / dpr - 1e-9);
+  });
+  it('tiny cells hit the 8 px sprite minimum -> hint still sits right of the bar end', () => {
+    const dpr = 1;
+    const board = 4 * 5; // 칸 5 css px -> 스프라이트 최소 8px
+    expect(cellSpritePx(board / 4, dpr)).toBe(8);
+    const c = new KeyHintCache(fakeCreate);
+    c.build(board, dpr, [4]);
+    const s = c.get(4, 0)!;
+    const m = cellTitleMetricsPx(8);
+    const k = 8 / dpr / (board / 4);
+    expect(s.x * k - m.barEnd / dpr).toBeGreaterThanOrEqual(2 / dpr - 1e-9);
   });
   it('invalidate after build -> sprites are redrawn as new objects, still present for every cell', () => {
     const c = new KeyHintCache(fakeCreate);

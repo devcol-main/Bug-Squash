@@ -63,10 +63,18 @@ describe('pause', () => {
     expect(s.clock.tick(120_016)).toBeCloseTo(0.016, 6);
   });
 
-  it('even if a raw hidden-time tick leaks in, dt is capped so a bug with 1s left cannot die from it', () => {
+  it('even if a raw hidden-time tick leaks in, dt is capped so a bug with 1s left survives it', () => {
     const s = setup();
+    const logic = new BugSquashLogic(createRng(1));
     s.clock.tick(0);
-    expect(s.clock.tick(60_000)).toBeLessThanOrEqual(0.1);
+    logic.forceSpawn(0, 'bug', 1);
+    const lives = logic.lives;
+    const dt = s.clock.tick(60_000);
+    expect(dt).toBeLessThanOrEqual(0.1);
+    logic.update(dt);
+    expect(logic.lives).toBe(lives);
+    expect(logic.getCell(0).kind).toBe('bug');
+    expect(logic.getCell(0).remaining).toBeGreaterThanOrEqual(0.9 - 1e-9);
   });
 
   it('input queued while hidden -> discarded on pause and on resume', () => {
@@ -173,12 +181,16 @@ describe('watchDpr', () => {
     expect(n).toBe(2);
     expect(queries[2]!.q).toBe('(resolution: 1dppx)');
   });
-  it('dispose -> removes the listener and ignores late events', () => {
+  it('dispose -> removes the listener, and a late event neither calls back nor re-registers', () => {
     const { mm, queries } = fakeMatchMedia();
     let n = 0;
     const stop = watchDpr(mm, () => 1, () => n++);
+    const lateHandler = [...queries[0]!.handlers][0]!;
     stop();
     expect(queries[0]!.handlers.size).toBe(0);
+    lateHandler();
+    expect(n).toBe(0);
+    expect(queries).toHaveLength(1);
   });
   it('matchMedia unavailable -> does nothing and returns a no-op disposer', () => {
     expect(() => watchDpr(null, () => 1, () => {})()).not.toThrow();

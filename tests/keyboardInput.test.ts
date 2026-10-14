@@ -43,12 +43,9 @@ describe('keyToCell', () => {
 });
 
 describe('shouldAcceptCellKey', () => {
-  const base = { phase: 'playing', optionsOpen: false, textTarget: false, buttonTarget: false };
+  const base = { playing: true, optionsOpen: false, textTarget: false, buttonTarget: false };
   it('playing with no overlay accepts', () => expect(shouldAcceptCellKey(base)).toBe(true));
-  it('title and gameOver ignore', () => {
-    expect(shouldAcceptCellKey({ ...base, phase: 'title' })).toBe(false);
-    expect(shouldAcceptCellKey({ ...base, phase: 'gameOver' })).toBe(false);
-  });
+  it('not playing (title or game over) ignores', () => expect(shouldAcceptCellKey({ ...base, playing: false })).toBe(false));
   it('options panel open ignores', () => expect(shouldAcceptCellKey({ ...base, optionsOpen: true })).toBe(false));
   it('button focus ignores cell keys', () => expect(shouldAcceptCellKey({ ...base, buttonTarget: true })).toBe(false));
   it('text input focus ignores', () => expect(shouldAcceptCellKey({ ...base, textTarget: true })).toBe(false));

@@ -324,6 +324,21 @@ describe('glitch offset', () => {
     expect(e[e.length - 1]).toBe(1);
     for (let i = 1; i < e.length; i++) expect(e[i]!).toBeGreaterThan(e[i - 1]!);
   });
+  it('edge jitter config is within [0, 0.5) of a band (the monotonic-edges condition)', () => {
+    const j = FX.screenGlitchEdgeJitter;
+    expect(j).toBeGreaterThanOrEqual(0);
+    expect(j).toBeLessThan(0.5);
+  });
+  it('screen glitch edges with extreme rng values (all low, all high, alternating) still increase strictly', () => {
+    const seqs: ((i: number) => number)[] = [() => 0, () => 0.999999, (i) => (i % 2 === 0 ? 0 : 0.999999), (i) => (i % 2 === 0 ? 0.999999 : 0)];
+    for (const f of seqs) {
+      let i = 0;
+      const fx = new FxState(() => f(i++), 4);
+      fx.consume(buf(ev('featureTapped', 0, 'feature')), 4);
+      const e = fx.screenGlitchEdges;
+      for (let k = 1; k < e.length; k++) expect(e[k]!).toBeGreaterThan(e[k - 1]!);
+    }
+  });
   it('screen glitch ends after its duration', () => {
     const fx = fresh();
     fx.consume(buf(ev('featureTapped', 0, 'feature')), 4);

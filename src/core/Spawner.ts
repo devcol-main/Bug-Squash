@@ -16,11 +16,6 @@ export class Spawner {
     this.timer = cfg.firstSpawnDelay;
   }
 
-  /** 출현 간격 타이머를 현재 난이도 기준으로 다시 맞춘다. */
-  schedule(t: number): void {
-    this.timer = spawnInterval(t, this.cfg);
-  }
-
   /** 시각 t 의 출현 간격. */
   interval(t: number): number {
     return spawnInterval(t, this.cfg);

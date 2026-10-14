@@ -1,7 +1,7 @@
 // 칸/오브젝트 스프라이트 캐시. 리사이즈/DPR 변경 시에만 오프스크린에 그린다 (shadowBlur는 build 안에서만).
 // 모든 스프라이트는 "칸 전체 영역" 정사각형(refSize CSS px)을 덮는다. 그릴 때 칸 크기로 스케일한다.
 // 오브젝트는 pixelArt 그리드를 정수 크기 블록(fillRect)으로 그려 또렷하다.
-import { cellMetricsPx, pixelBlockPx } from './objectBounds';
+import { cellMetricsPx, cellSpritePx, cellTitleMetricsPx, pixelBlockPx } from './objectBounds';
 import { BUG_GRID, FEATURE_GRID, HARD_CRACKED_GRID, HARD_GRID, gridCols, gridRows, type PixelGrid } from './pixelArt';
 import { VIEW_CONFIG } from './viewConfig';
 
@@ -63,7 +63,7 @@ export class Sprites {
     this.builtKey = key;
     this.sets = [];
     for (const n of grids) {
-      const set = this.buildSet(Math.max(8, Math.round((boardSize / n) * dpr)));
+      const set = this.buildSet(cellSpritePx(boardSize / n, dpr));
       this.sets[n] = set;
       this.last = set;
     }
@@ -124,18 +124,14 @@ export class Sprites {
     g.fillRect(inset + w - lw, inset, lw, w);
     g.shadowBlur = 0;
     const t = c.cellTitle;
-    const dot = Math.max(1, Math.round(px * t.dot));
-    const gap = Math.max(1, Math.round(px * t.gap));
-    const barH = Math.max(1, Math.round(px * t.barH));
-    const pad = Math.round(px * t.pad);
-    let x = inset + lw + pad;
-    const y = inset + lw + pad;
+    const { dot, gap, barH, barW, startX, startY: y } = cellTitleMetricsPx(px);
+    let x = startX;
     g.fillStyle = rgba(line, bright ? t.brightAlpha : 1);
     for (let i = 0; i < t.dots; i++) {
       g.fillRect(x, y, dot, dot);
       x += dot + gap;
     }
-    g.fillRect(x, y + Math.round((dot - barH) / 2), Math.round(px * t.barW), barH);
+    g.fillRect(x, y + Math.round((dot - barH) / 2), barW, barH);
     return s;
   }
 

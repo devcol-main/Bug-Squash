@@ -3,7 +3,6 @@ import { INPUT_CONFIG } from './inputConfig';
 let enabled = true;
 
 export function setVibrationEnabled(v: boolean): void { enabled = v; }
-export function isVibrationEnabled(): boolean { return enabled; }
 
 function vibrate(pattern: number | readonly number[]): void {
   if (!enabled) return;
