@@ -1,8 +1,9 @@
-// 오디오 튜닝 수치. 모든 게인은 마스터 gain 이전 값(0~1). Stack Up 구조를 복사해 Bug Squash용으로 바꿨다.
+import { CRT_OFF_DURATION } from '../fxTiming';
+// 오디오 튜닝 수치. 모든 게인은 마스터 gain 이전 값(0~1). 칩튠 BGM + 터미널 SFX.
 export const AUDIO_CONFIG = {
   masterGain: 0.5,
-  /** SFX 동시 보이스 상한. 골든 아르페지오(5음 + 반짝임 = 6) + 잡기(2) + 놓침/버저 여유. */
-  maxVoices: 14,
+  /** SFX 동시 보이스 상한. SFX 하나당 보이스 1~3개. */
+  maxVoices: 12,
   storageKey: 'bugSquash.audio.muted',
   settingsKey: 'bugSquash.audio.settings',
 
@@ -13,82 +14,82 @@ export const AUDIO_CONFIG = {
   /** 게임 오버 중 BGM 배율. */
   duckFactor: 0.25,
 
-  /** BGM: 8분음표 스텝 시퀀서. D 마이너 펜타토닉, Stack Up(108)보다 빠른 템포. */
+  /** BGM: 16분음표 스텝 시퀀서. 곡 데이터는 bgmSong.ts. 리드는 효과음이 묻히지 않게 낮게. */
   bgm: {
-    bpm: 144,
-    stepsPerBar: 8,
-    stepsPerBeat: 2,
-    bassSteps: [0, 3, 4, 7], // 마디 안 베이스 스텝 (싱코페이션)
-    bars: 4,
-    baseFreq: 146.83, // D3 (아르페지오 기준음)
-    scaleSemitones: [0, 3, 5, 7, 10], // D F G A C
-    /** 한 마디(8스텝)의 아르페지오: 음계 인덱스(옥타브 이어붙임), null=쉼. */
-    arpPattern: [0, 3, 2, null, 4, 3, 5, 2] as readonly (number | null)[],
-    barShift: [0, 1, 0, -1],
-    /** 마디별 베이스 근음(D 기준 반음). D, G, F, A. */
-    bassRoots: [0, 5, 3, 7],
-    bassBaseFreq: 36.71, // D1
-    hatSteps: [1, 3, 4, 5, 7],
+    stepsPerBeat: 4,
     lookahead: 0.3,
     tickMs: 80,
-    maxVoices: 8,
+    /** lookahead 안에 미리 예약된 보이스도 센다. 곡 피크(bgmPeakVoices) + 여유 4 이상이어야 한다. */
+    maxVoices: 20,
     startDelay: 0.08,
-    arp: { type: 'square' as OscillatorType, gain: 0.06, dur: 0.14, filterFreq: 2600 },
-    bass: { type: 'sawtooth' as OscillatorType, gain: 0.15, dur: 0.18, filterFreq: 420 },
-    hat: { gain: 0.04, dur: 0.04, filterFreq: 7500 },
+    /** 펄스 듀티 (leadDuty 인덱스 순서). */
+    duties: [0.125, 0.25] as readonly number[],
+    /**
+     * 듀티별 음량 보정. 정규화된 PeriodicWave에서 RMS는 sqrt(d(1-d))에 비례:
+     * 25% = 0.433, 12.5% = 0.331 (약 -2.3dB, 피크 정규화 후 기본파 차이까지 합쳐 체감 약 -3.5dB).
+     * 12.5%를 1.5배(+3.5dB)로 키워 25%와 맞춘다. SFX도 같은 인덱스로 적용.
+     */
+    dutyGain: [1.5, 1] as readonly number[],
+    pulseHarmonics: 48,
+    lead: { gain: 0.045, attack: 0.004, sustainRatio: 0.55, gateRatio: 0.92 },
+    bass: { type: 'triangle' as OscillatorType, gain: 0.2, steps: 2, gateRatio: 0.9 },
+    kick: { gain: 0.3, freq: 150, endFreq: 42, dur: 0.12 },
+    snare: { gain: 0.1, dur: 0.1, filterFreq: 1900, q: 0.9 },
+    hat: { gain: 0.035, dur: 0.035, filterFreq: 8000 },
   },
 
-  /** 잡기 음계: 장조 5음 음계(반음 오프셋). 콤보가 오를수록 위 옥타브로 이어진다. */
-  scaleSemitones: [0, 2, 4, 7, 9],
-  catchBaseFreq: 523.25, // C5
+  /** 잡기 블립 음계: A 마이너 펜타토닉(반음). 콤보가 오를수록 위 옥타브로 이어진다. */
+  scaleSemitones: [0, 3, 5, 7, 10],
+  catchBaseFreq: 440, // A4
   /** 콤보 1 = 스텝 0. 이 스텝에서 더 오르지 않는다. */
   catchMaxStep: 9,
-
-  catchTone: { dur: 0.16, gain: 0.28, harmonicGain: 0.1, type: 'triangle' as OscillatorType },
-  /** 단단한 버그 1타: 노이즈 버스트 + 높은 클릭. */
-  crack: {
-    noiseDur: 0.07,
-    noiseGain: 0.22,
-    noiseFilterFreq: 3500,
-    clickFreq: 2800,
-    clickEndFreq: 1800,
-    clickDur: 0.03,
-    clickGain: 0.12,
-    clickType: 'square' as OscillatorType,
+  /** 잡기: 키보드 클릭(노이즈 + 고역 틱) + 펄스 블립. */
+  catch: {
+    blipDuty: 1,
+    blipDur: 0.09,
+    blipGain: 0.2,
+    clickDur: 0.018,
+    clickGain: 0.16,
+    clickFilterFreq: 2500,
+    tickFreq: 4200,
+    tickDur: 0.012,
+    tickGain: 0.05,
   },
-  /** 골든: 상승 아르페지오 + 위 옥타브 반짝임. */
-  golden: {
-    notes: [0, 4, 7, 12, 16],
-    baseFreq: 783.99, // G5
-    stepDelay: 0.055,
-    dur: 0.2,
-    gain: 0.16,
-    type: 'sine' as OscillatorType,
-    sparkleGain: 0.06,
+  /** 단단한 버그 1타: 펄스파 주파수가 계단식으로 튀는 글리치. */
+  crack: { duty: 0, steps: 5, dur: 0.07, gain: 0.16, minFreq: 250, maxFreq: 2600 },
+  /** 골든: 8비트 코인 상승 아르페지오 (펄스 25%). */
+  golden: { duty: 1, notes: [0, 4, 7, 12], baseFreq: 659.25, stepDelay: 0.05, lastHold: 0.16, gain: 0.17 },
+  /** 기능 탭: 터미널 에러 벨, 낮은 비프 2회. */
+  error: { freq: 220, dur: 0.08, gap: 0.04, count: 2, gain: 0.2, type: 'square' as OscillatorType },
+  /** 놓침: 짧은 하강 블립 (에러보다 작고 부드럽게). */
+  miss: { freq: 420, endFreq: 230, dur: 0.12, gain: 0.13, type: 'triangle' as OscillatorType },
+  /** 보드 확장: 펄스 상승 스윕 + 빠른 타자음. */
+  expand: {
+    duty: 1,
+    freq: 220,
+    endFreq: 1760,
+    dur: 0.3,
+    gain: 0.14,
+    clicks: 4,
+    clickGap: 0.045,
+    clickDur: 0.015,
+    clickGain: 0.14,
+    clickFilterFreq: 2500,
   },
-  /** 기능 탭: 낮은 사각파 부저 두 번. */
-  error: { freq: 140, endFreq: 120, dur: 0.09, gap: 0.12, count: 2, gain: 0.2, type: 'square' as OscillatorType, filterFreq: 900 },
-  /** 놓침: 짧고 부드러운 하강음 (에러보다 작고 짧게). */
-  miss: { freq: 330, endFreq: 190, dur: 0.14, gain: 0.14, type: 'sine' as OscillatorType },
-  /** 보드 확장: 상승 스윕. */
-  expand: { freq: 180, endFreq: 900, dur: 0.4, gain: 0.18, type: 'sawtooth' as OscillatorType, filterFreq: 1600 },
-  /** 게임 오버: 하강 시퀀스 (반음 오프셋). */
+  /** 게임 오버: CRT 전원 꺼짐. 길이는 시각 연출과 공유 상수(fxTiming). audio는 reduced motion을 모르므로 항상 0.4초. */
   gameOver: {
-    notes: [0, -3, -7, -12],
-    baseFreq: 440,
-    stepDelay: 0.16,
-    /** 음 끝의 주파수 비율 (살짝 처지는 느낌). */
-    endRatio: 0.97,
-    dur: 0.32,
+    dur: CRT_OFF_DURATION,
+    freq: 1500,
+    endFreq: 40,
     gain: 0.22,
-    type: 'triangle' as OscillatorType,
-    filterFreq: 1400,
+    type: 'sine' as OscillatorType,
+    humFreq: 60,
+    humDur: 0.3,
+    humGain: 0.14,
   },
   attack: 0.005,
   muteRamp: 0.01,
   stopMargin: 0.02,
   noiseDur: 0.3,
   silentBufferRate: 22050,
-  harmonicType: 'sine' as OscillatorType,
-  harmonicDurRatio: 0.8,
 } as const;

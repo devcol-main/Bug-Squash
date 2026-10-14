@@ -1,5 +1,6 @@
 // Bug Squash view 튜닝 수치. (Stack Up viewConfig 구조를 복사해 필요한 것만 남김)
 import { DEFAULT_CONFIG } from '../core/config';
+import { CRT_OFF_DURATION, REDUCED_END_FADE_DURATION } from '../fxTiming';
 export const VIEW_CONFIG = {
   /** devicePixelRatio 상한. */
   maxDpr: 2,
@@ -189,7 +190,7 @@ export const VIEW_CONFIG = {
     /** 화면 글리치/CRT 꺼짐 레이어가 보드 위아래로 더 덮는 영역 (칸 한 변 비율. 팝업 여유). */
     layerPad: 0.4,
     /** 게임 오버 CRT 꺼짐: 지속, 세로 수축 구간 비율, 가로선 최소 높이 비율, 가로선 색/두께(CSS px). */
-    crtOffDuration: 0.4,
+    crtOffDuration: CRT_OFF_DURATION,
     crtOffSquashPortion: 0.75,
     crtOffLineScale: 0.02,
     crtOffColor: '#D8FFE8',
@@ -200,7 +201,7 @@ export const VIEW_CONFIG = {
      * fadeExpand = 보드 확장을 칸 이동 대신 짧은 페이드로 (expandFadeDuration초).
      * glitch/crtOff/typing false = 칸/화면 글리치, CRT 꺼짐, 배너 타이핑 없음 (게임 오버는 endFadeDuration초 페이드, 배너는 전체 문자열을 바로 표시).
      */
-    reduced: { particleScale: 0.5, sparkleScale: 0.25, fadeExpand: true, expandFadeDuration: 0.25, glitch: false, crtOff: false, typing: false, crtFlicker: false, endFadeDuration: 0.25 },
+    reduced: { particleScale: 0.5, sparkleScale: 0.25, fadeExpand: true, expandFadeDuration: 0.25, glitch: false, crtOff: false, typing: false, crtFlicker: false, endFadeDuration: REDUCED_END_FADE_DURATION },
   },
 
   /** view 전용 rng 시드 (core rng와 분리, 값은 임의). */

@@ -4,6 +4,9 @@ import {
   AudioSettingsStore,
   MuteStore,
   bgmLoopSteps,
+  bgmPeakVoices,
+  semitoneToFreq,
+  pulseWaveCoeffs,
   bgmStep,
   bgmStepDuration,
   comboToStep,
@@ -16,6 +19,9 @@ import {
   type SoundCue,
   type StorageLike,
 } from '../src/audio/audioLogic';
+import { BGM_SONG, SONG_BARS, STEPS_PER_BAR } from '../src/audio/bgmSong';
+import { CRT_OFF_DURATION } from '../src/fxTiming';
+import { VIEW_CONFIG } from '../src/view/viewConfig';
 import type { BugSquashEvent } from '../src/core/BugSquashLogic';
 
 const ev = (over: Partial<BugSquashEvent>): BugSquashEvent => ({
@@ -39,7 +45,7 @@ describe('cueForEvent', () => {
   it('hard bug first hit maps to the crack sound', () => {
     expect(cue({ type: 'hardHit', kind: 'hard' })?.kind).toBe('crack');
   });
-  it('feature tapped maps to the error buzzer', () => {
+  it('feature tapped maps to the error bell', () => {
     expect(cue({ type: 'featureTapped', kind: 'feature', lifeDelta: -1 })?.kind).toBe('error');
   });
   it('missed bug maps to the miss sound', () => {
@@ -163,31 +169,144 @@ describe('effectiveGains', () => {
   });
 });
 
-describe('bgm pattern', () => {
+describe('bgm song data', () => {
   const loop = bgmLoopSteps();
-  it('tempo is faster than Stack Up (108 BPM)', () => {
-    expect(AUDIO_CONFIG.bgm.bpm).toBeGreaterThan(108);
-    expect(60 / bgmStepDuration() / AUDIO_CONFIG.bgm.stepsPerBeat).toBeCloseTo(AUDIO_CONFIG.bgm.bpm);
+  const scalePcs = new Set(BGM_SONG.scaleSemitones);
+  it('tempo is near 150 BPM and the step duration matches it', () => {
+    expect(BGM_SONG.bpm).toBeGreaterThanOrEqual(145);
+    expect(BGM_SONG.bpm).toBeLessThanOrEqual(155);
+    expect(60 / bgmStepDuration() / AUDIO_CONFIG.bgm.stepsPerBeat).toBeCloseTo(BGM_SONG.bpm);
+  });
+  it('loop is 8 bars of 16 sixteenth-note steps', () => {
+    expect(SONG_BARS).toBe(8);
+    expect(loop).toBe(8 * 16);
+    expect(BGM_SONG.lead.length).toBe(8);
+    expect(BGM_SONG.leadDuty.length).toBe(8);
+    expect(BGM_SONG.bassRoots.length).toBe(8);
   });
   it('step index past the loop wraps to the same step', () => {
     expect(bgmStep(loop + 3)).toEqual(bgmStep(3));
     expect(bgmStep(-1)).toEqual(bgmStep(loop - 1));
   });
-  it('arpeggio notes stay inside the scale and bass stays low', () => {
-    const allowed = new Set(AUDIO_CONFIG.bgm.scaleSemitones.map((x) => x % 12));
-    let notes = 0;
+  it('every melody note is inside the scale and fits in its bar', () => {
+    for (const bar of BGM_SONG.lead) {
+      for (const [start, semi, len] of bar) {
+        expect(scalePcs.has(((semi % 12) + 12) % 12)).toBe(true);
+        expect(start + len).toBeLessThanOrEqual(STEPS_PER_BAR);
+      }
+    }
+  });
+  it('every bar has its own melody pattern, so it is not a repeated arpeggio', () => {
+    const sigs = new Set(BGM_SONG.lead.map((b) => JSON.stringify(b)));
+    expect(sigs.size).toBe(8);
+  });
+  it('question phrase and answer phrase differ and the last bar resolves to the tonic', () => {
+    expect(JSON.stringify(BGM_SONG.lead.slice(0, 4))).not.toBe(JSON.stringify(BGM_SONG.lead.slice(4)));
+    const last = BGM_SONG.lead[7]!;
+    expect(last[last.length - 1]![1] % 12).toBe(0);
+  });
+  it('lead uses both pulse duties across the loop', () => {
+    expect(new Set(BGM_SONG.leadDuty)).toEqual(new Set([0, 1]));
+    for (const d of BGM_SONG.leadDuty) expect(AUDIO_CONFIG.bgm.duties[d]).toBeDefined();
+  });
+  it('bass pattern and drum patterns are 16 steps long for every bar', () => {
+    expect(BGM_SONG.bassPattern.length).toBe(STEPS_PER_BAR);
+    expect(BGM_SONG.drums.length).toBe(SONG_BARS);
+    for (const d of BGM_SONG.drums) {
+      expect(d.kick.length).toBe(STEPS_PER_BAR);
+      expect(d.snare.length).toBe(STEPS_PER_BAR);
+      expect(d.hat.length).toBe(STEPS_PER_BAR);
+    }
+  });
+  it('bass stays low and plays on the first step of every bar', () => {
     for (let i = 0; i < loop; i++) {
       const st = bgmStep(i);
-      if (st.arp !== null) {
-        notes++;
-        expect(allowed.has(Math.round(12 * Math.log2(st.arp / AUDIO_CONFIG.bgm.baseFreq)) % 12)).toBe(true);
-      }
-      if (st.bass !== null) expect(st.bass).toBeLessThan(200);
+      if (st.bass !== null) expect(st.bass).toBeLessThan(250);
     }
-    expect(notes).toBeGreaterThan(0);
+    for (let bar = 0; bar < SONG_BARS; bar++) expect(bgmStep(bar * STEPS_PER_BAR).bass).not.toBeNull();
   });
-  it('bass plays on the first beat of every bar', () => {
-    for (let bar = 0; bar < AUDIO_CONFIG.bgm.bars; bar++) expect(bgmStep(bar * AUDIO_CONFIG.bgm.stepsPerBar).bass).not.toBeNull();
+  it('drums include kick, snare and hat hits and the last bar has a fill', () => {
+    const steps = Array.from({ length: loop }, (_, i) => bgmStep(i));
+    expect(steps.some((s) => s.kick)).toBe(true);
+    expect(steps.some((s) => s.snare)).toBe(true);
+    expect(steps.some((s) => s.hat)).toBe(true);
+    const snares = (bar: number): number => steps.slice(bar * 16, bar * 16 + 16).filter((s) => s.snare).length;
+    expect(snares(7)).toBeGreaterThan(snares(0));
+  });
+  it('bgmStep for a note in bar 3 matches the song data (lead steps, duty, bass frequency)', () => {
+    const bar = 3;
+    const [start, semi, len] = BGM_SONG.lead[bar]![1]!;
+    const st = bgmStep(bar * STEPS_PER_BAR + start);
+    expect(st.lead?.steps).toBe(len);
+    expect(st.lead?.duty).toBe(BGM_SONG.leadDuty[bar]);
+    expect(st.lead?.freq).toBeCloseTo(BGM_SONG.leadBaseFreq * 2 ** (semi / 12));
+    const bassStep = 8; // 옥타브 오프셋(+12)이 있는 스텝
+    const off = BGM_SONG.bassPattern[bassStep]!;
+    expect(bgmStep(bar * STEPS_PER_BAR + bassStep).bass).toBeCloseTo(BGM_SONG.bassBaseFreq * 2 ** ((BGM_SONG.bassRoots[bar]! + off) / 12));
+    expect(semitoneToFreq(BGM_SONG.bassBaseFreq, 0)).toBe(BGM_SONG.bassBaseFreq);
+  });
+});
+
+describe('pulseWaveCoeffs', () => {
+  const expectedReal = (d: number, n: number): number => (2 * Math.sin(2 * Math.PI * n * d)) / (Math.PI * n);
+  const expectedImag = (d: number, n: number): number => (2 * (1 - Math.cos(2 * Math.PI * n * d))) / (Math.PI * n);
+  it('duty 0.125 and 0.25 first harmonics match the Fourier formula', () => {
+    for (const d of [0.125, 0.25]) {
+      const { real, imag } = pulseWaveCoeffs(d, 8);
+      for (let n = 1; n <= 8; n++) {
+        expect(real[n]).toBeCloseTo(expectedReal(d, n), 5);
+        expect(imag[n]).toBeCloseTo(expectedImag(d, n), 5);
+      }
+    }
+  });
+  it('duty 0.25 has no 4th harmonic cosine term and duty 0.125 has no 8th', () => {
+    expect(Math.abs(pulseWaveCoeffs(0.25, 8).real[4]!)).toBeLessThan(1e-6);
+    expect(Math.abs(pulseWaveCoeffs(0.125, 8).real[8]!)).toBeLessThan(1e-6);
+  });
+  it('duty 0.5 reduces to a square wave with only odd sine harmonics', () => {
+    const { real, imag } = pulseWaveCoeffs(0.5, 6);
+    expect(imag[1]).toBeCloseTo(4 / Math.PI, 5);
+    expect(imag[2]).toBeCloseTo(0, 5);
+    expect(imag[3]).toBeCloseTo(4 / (3 * Math.PI), 5);
+    for (let n = 1; n <= 6; n++) expect(real[n]).toBeCloseTo(0, 5);
+  });
+  it('coefficient arrays have DC at zero and length harmonics + 1', () => {
+    const { real, imag } = pulseWaveCoeffs(0.25, 32);
+    expect(real.length).toBe(33);
+    expect(imag.length).toBe(33);
+    expect(real[0]).toBe(0);
+    expect(imag[0]).toBe(0);
+  });
+});
+
+describe('sfx design', () => {
+  it('game over sound length equals the CRT power-off visual duration', () => {
+    expect(AUDIO_CONFIG.gameOver.dur).toBe(VIEW_CONFIG.fx.crtOffDuration);
+    expect(AUDIO_CONFIG.gameOver.dur).toBe(CRT_OFF_DURATION);
+  });
+  it('typing click train fits inside the shared noise buffer', () => {
+    const x = AUDIO_CONFIG.expand;
+    expect((x.clicks - 1) * x.clickGap + x.clickDur).toBeLessThan(AUDIO_CONFIG.noiseDur);
+  });
+  it('duty gain table has one entry per duty and boosts the thinner pulse', () => {
+    expect(AUDIO_CONFIG.bgm.dutyGain.length).toBe(AUDIO_CONFIG.bgm.duties.length);
+    expect(AUDIO_CONFIG.bgm.dutyGain[0]).toBeGreaterThan(AUDIO_CONFIG.bgm.dutyGain[1]!);
+  });
+});
+
+describe('bgm voice budget', () => {
+  it('voice cap leaves at least 4 voices of headroom above the computed song peak', () => {
+    const peak = bgmPeakVoices();
+    expect(peak).toBeGreaterThan(0);
+    expect(peak + 4).toBeLessThanOrEqual(AUDIO_CONFIG.bgm.maxVoices);
+  });
+  it('peak calculation grows with the lookahead window', () => {
+    expect(bgmPeakVoices(undefined, undefined, 1)).toBeGreaterThan(bgmPeakVoices(undefined, undefined, 0.1));
+  });
+  it('a single long lead note and nothing else peaks at one voice', () => {
+    const empty = { lead: { freq: 440, steps: 4, duty: 0 }, bass: null, kick: false, snare: false, hat: false };
+    const table = [empty, ...Array.from({ length: 31 }, () => ({ lead: null, bass: null, kick: false, snare: false, hat: false }))];
+    expect(bgmPeakVoices(table, 0.1, 0)).toBe(1);
   });
 });
 

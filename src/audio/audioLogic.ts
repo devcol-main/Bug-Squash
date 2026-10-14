@@ -1,6 +1,7 @@
 // AudioContext 없이 테스트 가능한 순수 로직.
 import type { BugSquashEvent } from '../core/BugSquashLogic';
 import { AUDIO_CONFIG } from './audioConfig';
+import { BGM_SONG, SONG_BARS, STEPS_PER_BAR } from './bgmSong';
 
 export type SoundKind = 'catch' | 'crack' | 'golden' | 'error' | 'miss' | 'expand' | 'gameOver';
 /** 재사용 가능한 cue. step은 catch 전용(콤보 음계 스텝). */
@@ -160,37 +161,117 @@ export class AudioSettingsStore {
   }
 }
 
+export interface BgmLead {
+  readonly freq: number;
+  readonly steps: number;
+  /** AUDIO_CONFIG.bgm.duties 인덱스. */
+  readonly duty: number;
+}
 export interface BgmStep {
-  arp: number | null;
+  lead: BgmLead | null;
   bass: number | null;
+  kick: boolean;
+  snare: boolean;
   hat: boolean;
 }
 
 export function bgmLoopSteps(): number {
-  return AUDIO_CONFIG.bgm.stepsPerBar * AUDIO_CONFIG.bgm.bars;
+  return STEPS_PER_BAR * SONG_BARS;
 }
 
 /** 스텝 길이(초). */
-export function bgmStepDuration(bpm: number = AUDIO_CONFIG.bgm.bpm): number {
+export function bgmStepDuration(bpm: number = BGM_SONG.bpm): number {
   return 60 / bpm / AUDIO_CONFIG.bgm.stepsPerBeat;
 }
 
-/** 스텝 인덱스(무한히 증가 가능, 루프 길이로 순환) → 이 스텝에서 낼 음. */
-export function bgmStep(index: number): BgmStep {
-  const B = AUDIO_CONFIG.bgm;
+/** 곡 데이터를 스텝 테이블로 한 번만 펼친다. */
+interface MutableStep {
+  lead: BgmLead | null;
+  bass: number | null;
+  kick: boolean;
+  snare: boolean;
+  hat: boolean;
+}
+function buildBgmTable(): readonly Readonly<BgmStep>[] {
   const total = bgmLoopSteps();
-  const i = ((Math.floor(index) % total) + total) % total;
-  const bar = Math.floor(i / B.stepsPerBar);
-  const inBar = i % B.stepsPerBar;
-  const deg = B.arpPattern[inBar];
-  let arp: number | null = null;
-  if (deg !== undefined && deg !== null) {
-    const d = Math.max(0, deg + B.barShift[bar]!);
-    const len = B.scaleSemitones.length;
-    arp = semitoneToFreq(B.baseFreq, B.scaleSemitones[d % len]! + 12 * Math.floor(d / len));
+  const table: MutableStep[] = [];
+  for (let i = 0; i < total; i++) table.push({ lead: null, bass: null, kick: false, snare: false, hat: false });
+  for (let bar = 0; bar < SONG_BARS; bar++) {
+    const base = bar * STEPS_PER_BAR;
+    for (const [start, semi, len] of BGM_SONG.lead[bar]!) {
+      table[base + start]!.lead = { freq: semitoneToFreq(BGM_SONG.leadBaseFreq, semi), steps: len, duty: BGM_SONG.leadDuty[bar]! };
+    }
+    const d = BGM_SONG.drums[bar]!;
+    for (let s = 0; s < STEPS_PER_BAR; s++) {
+      const st = table[base + s]!;
+      const off = BGM_SONG.bassPattern[s];
+      if (off !== null && off !== undefined) st.bass = semitoneToFreq(BGM_SONG.bassBaseFreq, BGM_SONG.bassRoots[bar]! + off);
+      st.kick = d.kick[s] === 'x';
+      st.snare = d.snare[s] === 'x';
+      st.hat = d.hat[s] === 'x';
+    }
   }
-  const bass = (B.bassSteps as readonly number[]).includes(inBar) ? semitoneToFreq(B.bassBaseFreq, B.bassRoots[bar]! + 12) : null;
-  return { arp, bass, hat: (B.hatSteps as readonly number[]).includes(inBar) };
+  return table;
+}
+const BGM_TABLE = buildBgmTable();
+
+/** 한 보이스의 시작 스텝 시각과 수명(초). */
+function voiceLifetimes(st: Readonly<BgmStep>, stepDur: number): number[] {
+  const B = AUDIO_CONFIG.bgm;
+  const m = AUDIO_CONFIG.stopMargin;
+  const out: number[] = [];
+  if (st.lead) out.push(st.lead.steps * stepDur * B.lead.gateRatio + m);
+  if (st.bass !== null) out.push(B.bass.steps * stepDur * B.bass.gateRatio + m);
+  if (st.kick) out.push(B.kick.dur + m);
+  if (st.snare) out.push(Math.min(B.snare.dur, AUDIO_CONFIG.noiseDur) + m);
+  if (st.hat) out.push(Math.min(B.hat.dur, AUDIO_CONFIG.noiseDur) + m);
+  return out;
+}
+
+/**
+ * 스케줄러가 동시에 세게 되는 BGM 보이스의 최대치(보수적).
+ * 보이스는 lookahead만큼 일찍 예약되고 끝날 때까지 카운트되므로,
+ * 스텝 i를 예약하는 순간 (시작 <= t_i 이고 끝 > t_i - lookahead)인 보이스를 모두 센다. 루프 이음새를 위해 2루프를 본다.
+ */
+export function bgmPeakVoices(
+  table: readonly Readonly<BgmStep>[] = BGM_TABLE,
+  stepDur: number = bgmStepDuration(),
+  lookahead: number = AUDIO_CONFIG.bgm.lookahead,
+): number {
+  const n = table.length;
+  const lives = table.map((st) => voiceLifetimes(st, stepDur));
+  let peak = 0;
+  for (let i = n; i < 2 * n; i++) {
+    const t = i * stepDur;
+    let count = 0;
+    for (let j = 0; j <= i; j++) {
+      const l = lives[j % n]!;
+      const start = j * stepDur;
+      for (let k = 0; k < l.length; k++) if (start + l[k]! > t - lookahead) count++;
+    }
+    peak = Math.max(peak, count);
+  }
+  return peak;
+}
+
+/** 스텝 인덱스(무한히 증가 가능, 루프 길이로 순환) → 이 스텝에서 낼 음. 공유 객체이므로 수정 금지. */
+export function bgmStep(index: number): Readonly<BgmStep> {
+  const total = BGM_TABLE.length;
+  return BGM_TABLE[((Math.floor(index) % total) + total) % total]!;
+}
+
+/**
+ * 듀티 d의 펄스파(±1) 푸리에 계수. PeriodicWave용 (DC 제외).
+ * a_n = sin(2πnd)/(πn) * 2, b_n = (1 - cos(2πnd))/(πn) * 2.
+ */
+export function pulseWaveCoeffs(duty: number, harmonics: number): { real: Float32Array; imag: Float32Array } {
+  const real = new Float32Array(harmonics + 1);
+  const imag = new Float32Array(harmonics + 1);
+  for (let n = 1; n <= harmonics; n++) {
+    real[n] = (2 * Math.sin(2 * Math.PI * n * duty)) / (Math.PI * n);
+    imag[n] = (2 * (1 - Math.cos(2 * Math.PI * n * duty))) / (Math.PI * n);
+  }
+  return { real, imag };
 }
 
 /**

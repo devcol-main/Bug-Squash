@@ -10,6 +10,7 @@ import {
   effectiveGains,
   clampVolume,
   MuteStore,
+  pulseWaveCoeffs,
   semitoneToFreq,
   stepToFreq,
   type AudioSettings,
@@ -37,6 +38,8 @@ export class AudioManager {
   private bgmBus: GainNode | null = null;
   private sfxBus: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  /** 듀티별 펄스 PeriodicWave (C.bgm.duties 순서). 언락 때 한 번만 만든다. */
+  private waves: PeriodicWave[] = [];
   private voices = 0;
   private readonly cue: SoundCue = { kind: 'catch', step: 0 };
   private muted: boolean;
@@ -86,6 +89,7 @@ export class AudioManager {
         this.bgmBus = bgmBus;
         this.sfxBus = sfxBus;
         this.noise = this.makeNoise(ctx);
+        this.waves = this.makeWaves(ctx);
       }
       if (this.ctx.state !== 'running') {
         // iOS: running이 아니면 입력 핸들러마다 무음 버퍼를 다시 재생해 언락을 재시도
@@ -221,71 +225,61 @@ export class AudioManager {
     if (!ctx || ctx.state !== 'running') return; // 정지 중에는 currentTime이 멈춰 있어 쌓이지 않는다
     const now = ctx.currentTime;
     let next = nextBgmTime(this.bgmNextTime, now, 0); // 이미 지난 경우에만 재정렬(따라잡지 않음)
-    while (next < now + C.bgm.lookahead) {
+    const B = C.bgm;
+    while (next < now + B.lookahead) {
       const st = bgmStep(this.bgmStepIndex);
       const t = next;
-      if (st.arp !== null) this.bgmTone(C.bgm.arp, st.arp, t);
-      if (st.bass !== null) this.bgmTone(C.bgm.bass, st.bass, t);
-      if (st.hat) this.bgmHat(t);
+      if (st.lead) this.bgmLead(st.lead.freq, st.lead.steps * this.bgmStepDur * B.lead.gateRatio, st.lead.duty, t);
+      if (st.bass !== null) this.bgmBass(st.bass, t);
+      if (st.kick) this.bgmKick(t);
+      if (st.snare) this.bgmNoise(t, B.snare.dur, B.snare.gain, 'bandpass', B.snare.filterFreq, B.snare.q);
+      if (st.hat) this.bgmNoise(t, B.hat.dur, B.hat.gain, 'highpass', B.hat.filterFreq, 0.7);
       this.bgmStepIndex++;
       next += this.bgmStepDur;
     }
     this.bgmNextTime = next;
   }
 
-  private bgmTone(p: { type: OscillatorType; gain: number; dur: number; filterFreq: number }, freq: number, t0: number): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.bgmBus || this.bgmVoices >= C.bgm.maxVoices) return;
-    const t1 = t0 + p.dur;
-    const osc = ctx.createOscillator();
-    const filter = ctx.createBiquadFilter();
-    const g = ctx.createGain();
-    osc.type = p.type;
-    osc.frequency.value = freq;
-    filter.type = 'lowpass';
-    filter.frequency.value = p.filterFreq;
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(p.gain, t0 + C.attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, t1);
-    osc.connect(filter);
-    filter.connect(g);
-    g.connect(this.bgmBus);
-    this.bgmVoices++;
-    osc.onended = () => {
-      this.bgmVoices--;
-      osc.disconnect();
-      filter.disconnect();
-      g.disconnect();
-    };
-    osc.start(t0);
-    osc.stop(t1 + C.stopMargin);
+  private bgmLead(freq: number, dur: number, duty: number, t0: number): void {
+    const wave = this.waves[duty];
+    const L = C.bgm.lead;
+    const v = wave ? this.osc(wave, t0, t0 + dur, true) : null;
+    if (!v) return;
+    v.osc.frequency.value = freq;
+    v.g.gain.setValueAtTime(0.0001, t0);
+    const peak = L.gain * (C.bgm.dutyGain[duty] ?? 1);
+    v.g.gain.linearRampToValueAtTime(peak, t0 + L.attack);
+    v.g.gain.exponentialRampToValueAtTime(peak * L.sustainRatio, t0 + dur * 0.5);
+    v.g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   }
 
-  private bgmHat(t0: number): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.bgmBus || !this.noise || this.bgmVoices >= C.bgm.maxVoices) return;
-    const t1 = t0 + C.bgm.hat.dur;
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'highpass';
-    filter.frequency.value = C.bgm.hat.filterFreq;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(C.bgm.hat.gain, t0 + C.attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, t1);
-    src.connect(filter);
-    filter.connect(g);
-    g.connect(this.bgmBus);
-    this.bgmVoices++;
-    src.onended = () => {
-      this.bgmVoices--;
-      src.disconnect();
-      filter.disconnect();
-      g.disconnect();
-    };
-    src.start(t0);
-    src.stop(t1 + C.stopMargin);
+  private bgmBass(freq: number, t0: number): void {
+    const b = C.bgm.bass;
+    const dur = b.steps * this.bgmStepDur * b.gateRatio;
+    const v = this.osc(b.type, t0, t0 + dur, true);
+    if (!v) return;
+    v.osc.frequency.value = freq;
+    v.g.gain.setValueAtTime(0.0001, t0);
+    v.g.gain.exponentialRampToValueAtTime(b.gain, t0 + C.attack);
+    v.g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  }
+
+  private bgmKick(t0: number): void {
+    const k = C.bgm.kick;
+    const v = this.osc('sine', t0, t0 + k.dur, true);
+    if (!v) return;
+    v.osc.frequency.setValueAtTime(k.freq, t0);
+    v.osc.frequency.exponentialRampToValueAtTime(k.endFreq, t0 + k.dur);
+    v.g.gain.setValueAtTime(k.gain, t0);
+    v.g.gain.exponentialRampToValueAtTime(0.0001, t0 + k.dur);
+  }
+
+  private bgmNoise(t0: number, dur: number, gain: number, type: BiquadFilterType, freq: number, q: number): void {
+    const v = this.noiseVoice(t0, dur, type, freq, q, true);
+    if (!v) return;
+    v.g.gain.setValueAtTime(0.0001, t0);
+    v.g.gain.exponentialRampToValueAtTime(gain, t0 + 0.002);
+    v.g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   }
 
   /** core 이벤트 버퍼 → 소리. 버퍼는 이 호출 안에서만 읽는다. 이벤트가 없으면 아무 일도 하지 않는다. */
@@ -300,114 +294,201 @@ export class AudioManager {
     if (cueForEvent(ev, this.cue)) this.play(this.cue);
   }
 
+  // ---- SFX (노드 수: 잡기 7, 1타 2, 골든 2, 에러 2, 놓침 2, 확장 5, 게임 오버 4) ----
+
   private play(cue: SoundCue): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
     switch (cue.kind) {
       case 'catch': {
+        const c = C.catch;
+        // 콤보 피드백인 블립을 먼저 만든다 (보이스 상한에 걸리면 클릭/틱이 먼저 버려진다).
         const f = stepToFreq(cue.step);
-        const c = C.catchTone;
-        this.tone(c.type, f, f, c.dur, c.gain);
-        this.tone(C.harmonicType, f * 2, f * 2, c.dur * C.harmonicDurRatio, c.harmonicGain);
+        const blip = this.osc(this.waves[c.blipDuty] ?? 'square', t0, t0 + c.blipDur, false);
+        if (blip) {
+          blip.osc.frequency.value = f;
+          this.envelope(blip.g, t0, c.blipDur, c.blipGain * C.bgm.dutyGain[c.blipDuty]!);
+        }
+        this.clicks(t0, 1, 0, c.clickDur, c.clickGain, c.clickFilterFreq);
+        const tick = this.osc('square', t0, t0 + c.tickDur, false);
+        if (tick) {
+          tick.osc.frequency.value = c.tickFreq;
+          this.envelope(tick.g, t0, c.tickDur, c.tickGain);
+        }
         break;
       }
       case 'crack': {
         const k = C.crack;
-        this.noiseBurst(k.noiseDur, k.noiseGain, k.noiseFilterFreq);
-        this.tone(k.clickType, k.clickFreq, k.clickEndFreq, k.clickDur, k.clickGain);
+        const v = this.osc(this.waves[k.duty] ?? 'square', t0, t0 + k.dur, false);
+        if (!v) break;
+        // 계단식 랜덤 주파수. audio는 core가 아니므로 Math.random 허용.
+        const stepDur = k.dur / k.steps;
+        for (let i = 0; i < k.steps; i++) {
+          v.osc.frequency.setValueAtTime(k.minFreq + Math.random() * (k.maxFreq - k.minFreq), t0 + i * stepDur);
+        }
+        this.envelope(v.g, t0, k.dur, k.gain * C.bgm.dutyGain[k.duty]!);
         break;
       }
       case 'golden': {
         const g = C.golden;
-        for (let i = 0; i < g.notes.length; i++) {
-          const f = semitoneToFreq(g.baseFreq, g.notes[i]!);
-          this.tone(g.type, f, f, g.dur, g.gain, i * g.stepDelay);
-        }
-        const top = semitoneToFreq(g.baseFreq, g.notes[g.notes.length - 1]! + 12);
-        this.tone(g.type, top, top, g.dur, g.sparkleGain, (g.notes.length - 1) * g.stepDelay);
+        const n = g.notes.length;
+        const dur = (n - 1) * g.stepDelay + g.lastHold;
+        const v = this.osc(this.waves[g.duty] ?? 'square', t0, t0 + dur, false);
+        if (!v) break;
+        for (let i = 0; i < n; i++) v.osc.frequency.setValueAtTime(semitoneToFreq(g.baseFreq, g.notes[i]!), t0 + i * g.stepDelay);
+        this.envelope(v.g, t0, dur, g.gain * C.bgm.dutyGain[g.duty]!);
         break;
       }
       case 'error': {
         const e = C.error;
-        for (let i = 0; i < e.count; i++) this.tone(e.type, e.freq, e.endFreq, e.dur, e.gain, i * e.gap, e.filterFreq);
+        const dur = e.count * e.dur + (e.count - 1) * e.gap;
+        const v = this.osc(e.type, t0, t0 + dur, false);
+        if (!v) break;
+        v.osc.frequency.value = e.freq;
+        // 한 게인에서 비프를 끊어 쓴다 (노드 절약).
+        v.g.gain.setValueAtTime(0.0001, t0);
+        for (let i = 0; i < e.count; i++) {
+          const s = t0 + i * (e.dur + e.gap);
+          v.g.gain.setValueAtTime(e.gain, s + C.attack);
+          v.g.gain.setValueAtTime(0.0001, s + e.dur);
+        }
         break;
       }
-      case 'miss':
-        this.tone(C.miss.type, C.miss.freq, C.miss.endFreq, C.miss.dur, C.miss.gain);
+      case 'miss': {
+        const m = C.miss;
+        const v = this.osc(m.type, t0, t0 + m.dur, false);
+        if (!v) break;
+        v.osc.frequency.setValueAtTime(m.freq, t0);
+        v.osc.frequency.exponentialRampToValueAtTime(m.endFreq, t0 + m.dur);
+        this.envelope(v.g, t0, m.dur, m.gain);
         break;
-      case 'expand':
-        this.tone(C.expand.type, C.expand.freq, C.expand.endFreq, C.expand.dur, C.expand.gain, 0, C.expand.filterFreq);
+      }
+      case 'expand': {
+        const x = C.expand;
+        const v = this.osc(this.waves[x.duty] ?? 'square', t0, t0 + x.dur, false);
+        if (v) {
+          v.osc.frequency.setValueAtTime(x.freq, t0);
+          v.osc.frequency.exponentialRampToValueAtTime(x.endFreq, t0 + x.dur);
+          this.envelope(v.g, t0, x.dur, x.gain * C.bgm.dutyGain[x.duty]!);
+        }
+        this.clicks(t0, x.clicks, x.clickGap, x.clickDur, x.clickGain, x.clickFilterFreq);
         break;
+      }
       case 'gameOver': {
-        const g = C.gameOver;
-        for (let i = 0; i < g.notes.length; i++) {
-          const f = semitoneToFreq(g.baseFreq, g.notes[i]!);
-          this.tone(g.type, f, f * g.endRatio, g.dur, g.gain, i * g.stepDelay, g.filterFreq);
+        const o = C.gameOver;
+        const v = this.osc(o.type, t0, t0 + o.dur, false);
+        if (v) {
+          v.osc.frequency.setValueAtTime(o.freq, t0);
+          v.osc.frequency.exponentialRampToValueAtTime(o.endFreq, t0 + o.dur);
+          v.g.gain.setValueAtTime(o.gain, t0);
+          v.g.gain.exponentialRampToValueAtTime(0.0001, t0 + o.dur);
+        }
+        const hum = this.osc('sine', t0, t0 + o.humDur, false);
+        if (hum) {
+          hum.osc.frequency.value = o.humFreq;
+          this.envelope(hum.g, t0, o.humDur, o.humGain);
         }
         break;
       }
     }
   }
 
-  private tone(type: OscillatorType, f0: number, f1: number, dur: number, gain: number, delay = 0, lowpass = 0): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.sfxBus || !canStartSfxVoice(this.voices)) return;
-    const t0 = ctx.currentTime + delay;
-    const t1 = t0 + dur;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(f0, t0);
-    if (f1 !== f0) osc.frequency.exponentialRampToValueAtTime(f1, t1);
+  /** 어택 후 지수 감쇠 엔벨로프. */
+  private envelope(g: GainNode, t0: number, dur: number, gain: number): void {
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(gain, t0 + C.attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, t1);
-    let tail: AudioNode = osc;
-    let filter: BiquadFilterNode | null = null;
-    if (lowpass > 0) {
-      filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = lowpass;
-      osc.connect(filter);
-      tail = filter;
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  }
+
+  /** 노이즈 소스 하나로 키보드 클릭 count번 (gap 간격). 노드 3개. */
+  private clicks(t0: number, count: number, gap: number, dur: number, gain: number, freq: number): void {
+    const total = (count - 1) * gap + dur;
+    const v = this.noiseVoice(t0, total, 'highpass', freq, 0.7, false);
+    if (!v) return;
+    v.g.gain.setValueAtTime(0.0001, t0);
+    for (let i = 0; i < count; i++) {
+      const s = t0 + i * gap;
+      v.g.gain.setValueAtTime(gain, s + 0.001);
+      v.g.gain.exponentialRampToValueAtTime(0.0001, s + dur);
     }
-    tail.connect(g);
-    g.connect(this.sfxBus);
-    this.voices++;
+  }
+
+  /** 오실레이터 + 게인 보이스 (bus에 연결). 보이스 상한이면 null. 끝나면 노드를 정리한다. */
+  private osc(wave: OscillatorType | PeriodicWave, t0: number, t1: number, bgm: boolean): { osc: OscillatorNode; g: GainNode } | null {
+    const ctx = this.ctx;
+    const bus = bgm ? this.bgmBus : this.sfxBus;
+    if (!ctx || !bus || !this.canVoice(bgm)) return null;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    if (typeof wave === 'string') osc.type = wave as OscillatorType; // typeof 분기: 구형 webkit에는 PeriodicWave 전역이 없을 수 있다
+    else osc.setPeriodicWave(wave);
+    osc.connect(g);
+    g.connect(bus);
+    this.addVoice(bgm, 1);
     osc.onended = () => {
-      this.voices--;
+      this.addVoice(bgm, -1);
       osc.disconnect();
-      filter?.disconnect();
       g.disconnect();
     };
     osc.start(t0);
     osc.stop(t1 + C.stopMargin);
+    return { osc, g };
   }
 
-  private noiseBurst(dur: number, gain: number, freq: number): void {
+  /** 공유 노이즈 버퍼 + 필터 + 게인 보이스. 노드 3개. */
+  private noiseVoice(
+    t0: number,
+    dur: number,
+    type: BiquadFilterType,
+    freq: number,
+    q: number,
+    bgm: boolean,
+  ): { g: GainNode } | null {
     const ctx = this.ctx;
-    if (!ctx || !this.sfxBus || !this.noise || !canStartSfxVoice(this.voices)) return;
-    const t0 = ctx.currentTime;
-    const t1 = t0 + dur;
+    const bus = bgm ? this.bgmBus : this.sfxBus;
+    if (!ctx || !bus || !this.noise || !this.canVoice(bgm)) return null;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
     const filter = ctx.createBiquadFilter();
-    filter.type = 'highpass';
+    filter.type = type;
     filter.frequency.value = freq;
+    filter.Q.value = q;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(gain, t0 + C.attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, t1);
     src.connect(filter);
     filter.connect(g);
-    g.connect(this.sfxBus);
-    this.voices++;
+    g.connect(bus);
+    this.addVoice(bgm, 1);
     src.onended = () => {
-      this.voices--;
+      this.addVoice(bgm, -1);
       src.disconnect();
       filter.disconnect();
       g.disconnect();
     };
     src.start(t0);
-    src.stop(t1 + C.stopMargin);
+    src.stop(t0 + Math.min(dur, C.noiseDur) + C.stopMargin);
+    return { g };
+  }
+
+  private canVoice(bgm: boolean): boolean {
+    return bgm ? this.bgmVoices < C.bgm.maxVoices : canStartSfxVoice(this.voices);
+  }
+
+  private addVoice(bgm: boolean, d: number): void {
+    if (bgm) this.bgmVoices += d;
+    else this.voices += d;
+  }
+
+  /** 펄스 PeriodicWave 생성. 실패하면 빈 배열(리드 생략, SFX는 square 폴백). */
+  private makeWaves(ctx: AudioContext): PeriodicWave[] {
+    try {
+      return C.bgm.duties.map((d) => {
+        const { real, imag } = pulseWaveCoeffs(d, C.bgm.pulseHarmonics);
+        return ctx.createPeriodicWave(real, imag);
+      });
+    } catch {
+      return [];
+    }
   }
 
   /** 공유 노이즈 버퍼 (1회 생성, 고정 시드 LCG로 결정적). */
