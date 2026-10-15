@@ -8,7 +8,8 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "tsc --noEmit && vitest run"
+    "check": "tsc --noEmit && vitest run",
+    "media": "node scripts/capture-media.mjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
