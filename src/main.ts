@@ -1,6 +1,6 @@
 import { type LeaderboardEntry, type LeaderboardService } from './shared/leaderboard';
 import { BugSquashLogic, type EventBuffer } from './core/BugSquashLogic';
-import type { BugSquashConfig } from './core/config';
+import { DEFAULT_CONFIG, type BugSquashConfig } from './core/config';
 import { createRng } from './core/rng';
 import { AudioManager } from './audio/AudioManager';
 import { PointerInput } from './input/PointerInput';
@@ -21,6 +21,7 @@ import { releaseFocus } from './ui/focusRelease';
 import { waitForFont } from './ui/fonts';
 import { OverlayDelay } from './ui/overlayDelay';
 import { UI_CONFIG } from './ui/uiConfig';
+import { stageOf, track } from './analytics';
 import './ui/ui.css';
 
 declare global {
@@ -128,6 +129,11 @@ if (canvas instanceof HTMLCanvasElement) {
     result.bugsCaught = logic.bugsCaught;
     result.maxCombo = logic.maxCombo;
     result.time = logic.time;
+    track('game_over', {
+      stage: stageOf(logic, DEFAULT_CONFIG.largeBoardSize),
+      score: result.score,
+      duration_ms: Math.round(logic.time * 1000),
+    });
     const isNewBest = best.submit(result.score);
     // 오버레이는 CRT 꺼짐(reduced이면 페이드)이 끝난 뒤에 보인다. flow 상태와 입력 잠금(0.6초)은 바로 시작한다.
     overlay.start(renderer.endDelay, flow.round, isNewBest);
@@ -155,6 +161,7 @@ if (canvas instanceof HTMLCanvasElement) {
       switch (ev.type) {
         case 'boardExpand':
           syncBoard(); // 확장을 consume한 같은 프레임에 입력 매핑을 4x4로
+          track('stage_clear', { stage: 1, score: logic.score });
           break;
         case 'gameOver':
           onGameOver();
