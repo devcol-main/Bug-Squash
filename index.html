@@ -49,6 +49,8 @@
         <input id="nick" class="nick" type="text" maxlength="12" placeholder="Nickname" aria-label="Nickname" autocomplete="off" autocapitalize="off" spellcheck="false">
         <button id="nick-submit" class="submit" type="submit">Submit</button>
       </form>
+      <p id="nick-rule" class="nick-rule"></p>
+      <p id="board-note" class="board-note" aria-live="polite" hidden></p>
       <ol id="board" class="board" data-ui></ol>
       <button id="retry" class="retry" type="button">&gt; Tap to retry<span class="cursor">_</span></button>
     </section>
@@ -66,6 +68,7 @@
         <div class="opt-row"><span class="opt-label" id="lbl-vib">Vibration</span><button id="opt-vib" class="opt-toggle" type="button" aria-pressed="true" aria-labelledby="lbl-vib">[x] On</button></div>
         <div class="opt-row"><span class="opt-label" id="lbl-rm">Reduced motion</span><button id="opt-rm" class="opt-toggle" type="button" aria-pressed="false" aria-labelledby="lbl-rm">[ ] Off</button></div>
         <div class="opt-row"><span class="opt-label" id="lbl-reset">Best &amp; scores</span><button id="opt-reset" class="opt-toggle opt-danger" type="button">Reset data</button></div>
+        <div class="opt-row"><span class="opt-label" id="lbl-lb-delete">Online scores (all games)</span><button id="opt-lb-delete" class="opt-toggle opt-danger" type="button" aria-labelledby="lbl-lb-delete opt-lb-delete">Delete mine</button></div>
         <button id="opt-close" class="opt-close" type="button">[Close]</button>
       </div>
     </div>

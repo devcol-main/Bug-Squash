@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { StorageLike } from '../src/shared/leaderboard';
-import { createBugSquashLeaderboard, createPlayerProfile, makeStats, sanitizeBugSquashStats } from '../src/ui/leaderboard';
+import {
+  boardNote,
+  createBugSquashLeaderboard,
+  createBugSquashOnlineLeaderboard,
+  createPlayerProfile,
+  makeStats,
+  sameLocalEntry,
+  sanitizeBugSquashStats,
+} from '../src/ui/leaderboard';
 import { UI_CONFIG } from '../src/ui/uiConfig';
 
 function memStorage(): StorageLike & { data: Record<string, string> } {
@@ -90,5 +98,33 @@ describe('bug-squash nickname after Reset', () => {
     expect(nicknameToSubmit('', profile.nickname)).toBe('Neo');
     expect(nicknameToSubmit('Trin', profile.nickname)).toBe('Trin');
     expect(nicknameToSubmit('', '')).toBe('Anonymous');
+  });
+});
+
+describe('bug-squash online leaderboard wiring', () => {
+  it('without an endpoint the online service is local-only and still uses bugSquash.leaderboard', async () => {
+    const s = memStorage();
+    const lb = createBugSquashOnlineLeaderboard(createPlayerProfile(s), null, s);
+    expect(lb.gameId).toBe('bug-squash');
+    expect(lb.online).toBe(false);
+    const stats = { bugsCaught: 3, maxCombo: 2, survivalSec: 20 };
+    await lb.submit({ playerId: 'p', nickname: 'Neo', score: 10, stats, ts: 1, durationMs: 20_000 });
+    expect(await lb.getTop(10)).toEqual([{ playerId: 'p', nickname: 'Neo', score: 10, stats, ts: 1 }]);
+    expect(lb.lastSource).toBe('local');
+    expect(s.data[UI_CONFIG.leaderboardKey]).not.toContain('durationMs');
+  });
+
+  it('board note: offline only when a server is configured; renamed names are announced', () => {
+    expect(boardNote(true, 'local', null)).toBe('Offline: showing scores on this device');
+    expect(boardNote(false, 'local', null)).toBeNull();
+    expect(boardNote(true, 'online', { publishedName: 'Player0421', nameStatus: 'ai_fallback' })).toBe('Your name is shown as Player0421.');
+    expect(boardNote(true, 'online', { publishedName: 'Player0421', nameStatus: 'ok' })).toBeNull();
+  });
+
+  it('local "mine" match needs the same nickname, score and ts', () => {
+    const mine = { playerId: 'p', nickname: 'Neo', score: 10, stats: {}, ts: 5 };
+    expect(sameLocalEntry({ ...mine }, mine)).toBe(true);
+    expect(sameLocalEntry({ ...mine, score: 11 }, mine)).toBe(false);
+    expect(sameLocalEntry(mine, null)).toBe(false);
   });
 });

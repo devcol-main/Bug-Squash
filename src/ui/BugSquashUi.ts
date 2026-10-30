@@ -1,4 +1,4 @@
-import type { LeaderboardEntry } from '../shared/leaderboard';
+import { NICKNAME_RULE_TEXT, nicknameFormatOk, type LeaderboardEntry } from '../shared/leaderboard';
 import type { Phase } from './flow';
 import { checkboxText, lifeSlotChange, lifeSlotState, muteButtonText, multiplierText, multiplierVisible, shouldBlinkMultiplier } from './hud';
 
@@ -13,6 +13,31 @@ function el<T extends HTMLElement>(id: string, ctor: { new (): T }): T {
   const e = document.getElementById(id);
   if (!(e instanceof ctor)) throw new Error(`#${id} not found`);
   return e;
+}
+
+/** 옵션의 "Online scores: Delete mine" 버튼 상태. */
+export type LbDeleteState = 'idle' | 'armed' | 'busy' | 'deleted' | 'none' | 'failed';
+
+const LB_DELETE_TEXT: Record<LbDeleteState, string> = {
+  idle: 'Delete mine',
+  armed: 'Tap again to confirm',
+  busy: 'Deleting…',
+  deleted: 'Deleted',
+  none: 'Nothing to delete',
+  failed: 'Failed, try again',
+};
+
+/** 신고 버튼 두 번째 탭을 기다리는 시간(ms). */
+const REPORT_CONFIRM_MS = 3000;
+
+interface BoardRow {
+  li: HTMLLIElement;
+  rank: HTMLSpanElement;
+  name: HTMLSpanElement;
+  pts: HTMLSpanElement;
+  report: HTMLButtonElement;
+  entryId: number | null;
+  armedTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export interface GameOverView {
@@ -44,6 +69,11 @@ export class BugSquashUi {
   readonly optReduced = el('opt-rm', HTMLButtonElement);
   readonly optReset = el('opt-reset', HTMLButtonElement);
   readonly optClose = el('opt-close', HTMLButtonElement);
+  readonly optLbDelete = el('opt-lb-delete', HTMLButtonElement);
+  private readonly nickRule = el('nick-rule', HTMLParagraphElement);
+  private readonly boardNote = el('board-note', HTMLParagraphElement);
+  /** 순위표의 Report 확인 후 호출. 서버가 받으면 true. main이 연결한다. */
+  onReport: ((entryId: number) => Promise<boolean>) | null = null;
   private readonly combo = el('combo', HTMLDivElement);
   private readonly lives = el('lives', HTMLDivElement);
   private readonly hudBest = el('hud-best', HTMLDivElement);
@@ -52,7 +82,7 @@ export class BugSquashUi {
   private readonly finalScore = el('final-score', HTMLDivElement);
   private readonly best = el('best', HTMLDivElement);
   private readonly board = el('board', HTMLOListElement);
-  private readonly rows: { li: HTMLLIElement; rank: HTMLSpanElement; name: HTMLSpanElement; pts: HTMLSpanElement }[] = [];
+  private readonly rows: BoardRow[] = [];
   private readonly emptyRow: HTMLLIElement;
   private readonly lifeIcons: HTMLElement[] = [];
   private shownScore = -1;
@@ -68,14 +98,23 @@ export class BugSquashUi {
       const rank = document.createElement('span');
       const name = document.createElement('span');
       const pts = document.createElement('span');
+      const report = document.createElement('button');
       rank.className = 'rank';
       name.className = 'name';
       pts.className = 'pts';
-      li.append(rank, name, pts);
+      report.className = 'report';
+      report.type = 'button';
+      report.textContent = 'Report';
+      report.hidden = true;
+      li.append(rank, name, pts, report);
       li.hidden = true;
       this.board.append(li);
-      this.rows.push({ li, rank, name, pts });
+      const row: BoardRow = { li, rank, name, pts, report, entryId: null, armedTimer: null };
+      report.addEventListener('click', () => this.pressReport(row));
+      this.rows.push(row);
     }
+    this.nickRule.textContent = NICKNAME_RULE_TEXT;
+    this.input.addEventListener('input', () => this.checkNick());
     for (const icon of Array.from(this.lives.querySelectorAll<HTMLElement>('.life'))) this.lifeIcons.push(icon);
     // 로고 로드 실패 시 깨진 이미지/alt 텍스트 대신 숨긴다(게임 동작과 무관)
     for (const img of Array.from(this.root.querySelectorAll<HTMLImageElement>('.brand-logo'))) {
@@ -199,12 +238,64 @@ export class BugSquashUi {
     this.optReset.classList.toggle('armed', armed);
   }
 
+  /** 입력 중인 닉네임이 형식에 안 맞으면 규칙 문구를 경고색으로. */
+  private checkNick(): void {
+    this.nickRule.classList.toggle('bad', !nicknameFormatOk(this.input.value));
+  }
+
+  /** 옵션의 온라인 기록 삭제 버튼 표시. */
+  setLbDeleteState(s: LbDeleteState): void {
+    this.optLbDelete.textContent = LB_DELETE_TEXT[s];
+    this.optLbDelete.classList.toggle('armed', s === 'armed');
+    this.optLbDelete.disabled = s === 'busy';
+  }
+
+  /** 순위표 위 안내 문구 (오프라인, 이름이 바뀜 등). null이면 숨긴다. */
+  setBoardNote(text: string | null): void {
+    this.boardNote.hidden = text === null;
+    this.boardNote.textContent = text ?? '';
+  }
+
+  private resetReport(row: BoardRow): void {
+    if (row.armedTimer !== null) clearTimeout(row.armedTimer);
+    row.armedTimer = null;
+    row.report.textContent = 'Report';
+    row.report.classList.remove('armed');
+    row.report.disabled = false;
+  }
+
+  /** 첫 탭은 확인 대기("Report?"), 제한 시간 안의 두 번째 탭에서 보낸다. */
+  private pressReport(row: BoardRow): void {
+    const id = row.entryId;
+    if (id === null || row.report.disabled) return;
+    if (row.armedTimer === null) {
+      row.report.textContent = 'Report?';
+      row.report.classList.add('armed');
+      row.armedTimer = setTimeout(() => this.resetReport(row), REPORT_CONFIRM_MS);
+      return;
+    }
+    this.resetReport(row);
+    row.report.disabled = true;
+    row.report.textContent = '…';
+    const send = this.onReport ? this.onReport(id) : Promise.resolve(false);
+    send.then(
+      (ok) => {
+        if (row.entryId === id) row.report.textContent = ok ? 'Reported' : 'Failed';
+      },
+      () => {
+        if (row.entryId === id) row.report.textContent = 'Failed';
+      },
+    );
+  }
+
   showGameOver(v: GameOverView, nickname: string): void {
     this.newBest.hidden = !v.isNewBest;
     this.finalScore.textContent = String(v.score);
     this.best.textContent = `BEST ${v.best}`;
     this.form.hidden = false;
     this.input.value = nickname;
+    this.checkNick();
+    this.setBoardNote(null);
     this.clearBoard(); // 로딩 중: 빈 행 문구도 숨김
   }
 
@@ -224,23 +315,31 @@ export class BugSquashUi {
     this.form.hidden = true;
   }
 
-  /** Top N 표시. mine과 같은 항목(닉네임/점수/ts)을 하이라이트. */
-  renderBoard(entries: readonly LeaderboardEntry[], mine: LeaderboardEntry | null): void {
+  /**
+   * Top N 표시. isMine이 true인 첫 항목을 하이라이트한다.
+   * reportable이면(온라인 순위표) 내 줄이 아닌 줄에 Report 버튼을 보인다.
+   */
+  renderBoard<T extends LeaderboardEntry>(entries: readonly T[], isMine: (e: T) => boolean, reportable = false): void {
     let highlighted = false;
     for (let i = 0; i < this.rows.length; i++) {
       const r = this.rows[i]!;
       const e = entries[i];
+      this.resetReport(r);
       if (!e) {
         r.li.hidden = true;
+        r.entryId = null;
+        r.report.hidden = true;
         continue;
       }
       r.li.hidden = false;
       r.rank.textContent = String(i + 1);
       r.name.textContent = e.nickname;
       r.pts.textContent = String(e.score);
-      const isMine = !highlighted && mine !== null && e.ts === mine.ts && e.score === mine.score && e.nickname === mine.nickname;
-      if (isMine) highlighted = true;
-      r.li.classList.toggle('me', isMine);
+      const mine = !highlighted && isMine(e);
+      if (mine) highlighted = true;
+      r.li.classList.toggle('me', mine);
+      r.entryId = e.entryId ?? null;
+      r.report.hidden = !reportable || mine || r.entryId === null;
     }
     this.emptyRow.hidden = entries.length > 0;
   }
