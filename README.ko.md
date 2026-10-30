@@ -170,7 +170,7 @@ tests/      Vitest
 
 ### 저장과 리더보드
 
-모든 저장은 `localStorage`를 `try/catch`로 감싸서 합니다. 저장소가 막힌 환경에서도 게임은 돌아갑니다. 리더보드는 지금은 로컬이지만 `LeaderboardService` 인터페이스 뒤에 있어서 나중에 서버로 바꿀 수 있습니다. DevCol 게임은 각자 자기 리더보드와 기록을 갖습니다. Bug Squash는 잡은 버그 수, 최대 콤보, 생존 시간을 남깁니다. 작은 공통 플레이어 프로필(아이디 하나와 닉네임 하나)은 따로 두었는데, 앞으로 여러 게임의 순위를 모아 보여 줄 대시보드를 위한 것입니다.
+모든 저장은 `localStorage`를 `try/catch`로 감싸서 합니다. 저장소가 막힌 환경에서도 게임은 돌아갑니다. devcol.net에서는 Top 10을 공용 온라인 리더보드(`a.devcol.net/lb`, 서버는 [devcol-analytics](https://github.com/devcol-main/devcol-analytics))에서 가져옵니다. 모든 점수는 로컬에도 저장되고, 서버에 닿지 못하면 "Offline" 안내와 함께 로컬 순위를 보여 줍니다. 로그인은 없고, 첫 제출 때 받은 랜덤 토큰(`devcol.player.token`)으로 Options → Online scores → Delete mine을 할 수 있습니다. 플레이어 ID는 보내지 않으며, 부적절한 이름은 `Player####`로 보입니다. devcol.net 밖에서는 로컬 전용입니다(`npm run dev`에 `?lb=http://localhost:8787/lb`를 붙이면 로컬 Worker에 연결). 모두 `LeaderboardService` 인터페이스 뒤에 있습니다. DevCol 게임은 각자 자기 리더보드와 기록을 갖습니다. Bug Squash는 잡은 버그 수, 최대 콤보, 생존 시간을 남깁니다. 작은 공통 플레이어 프로필(아이디 하나와 닉네임 하나)은 따로 두었는데, 앞으로 여러 게임의 순위를 모아 보여 줄 대시보드를 위한 것입니다.
 
 ### 크기
 

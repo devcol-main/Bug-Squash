@@ -143,7 +143,7 @@ Pointer Events handle mouse, touch and pen in one path; every `pointerdown` is o
 
 ### Storage and leaderboard
 
-Everything is stored in `localStorage` behind `try/catch`, so the game still runs where storage is blocked. The leaderboard is local for now, behind a `LeaderboardService` interface so a server can replace it later. Each DevCol game keeps its own leaderboard and stats (for Bug Squash: bugs squashed, best combo and time survived), while a small shared player profile (one ID and nickname) lets a future dashboard rank players across games.
+Everything is stored in `localStorage` behind `try/catch`, so the game still runs where storage is blocked. On devcol.net the Top 10 comes from the shared online leaderboard (`a.devcol.net/lb`, server in [devcol-analytics](https://github.com/devcol-main/devcol-analytics)); every score is also saved locally, and the game falls back to the local board with an "Offline" note when the server can't be reached. There is no login: the first submit gets a random owner token (`devcol.player.token`), used for Options → Online scores → Delete mine. The player ID is never sent, and offensive names are shown as `Player####`. Outside devcol.net it is local only (`npm run dev` with `?lb=http://localhost:8787/lb` talks to a local Worker). All of this sits behind the `LeaderboardService` interface. Each DevCol game keeps its own leaderboard and stats (for Bug Squash: bugs squashed, best combo and time survived), while a small shared player profile (one ID and nickname) lets a future dashboard rank players across games.
 
 ### Size
 

@@ -218,6 +218,19 @@
 .board li.me { background: var(--term-green); color: var(--term-bg); }
 .board li.me .rank { color: var(--term-bg); }
 .board li.empty { justify-content: center; color: var(--term-dim-text); }
+.board .report {
+  flex: none; padding: 0 calc(var(--u) * 1.5); font: inherit; font-size: calc(var(--u) * 2.6); font-weight: 600; color: var(--term-dim-text);
+  background: transparent; border: 1px solid var(--term-dim-text); cursor: pointer; touch-action: manipulation;
+}
+.board .report[hidden] { display: none; }
+.board .report.armed { color: var(--term-bg); background: var(--term-red); border-color: var(--term-red); }
+.board .report:disabled { cursor: default; opacity: 0.7; }
+.board .report:focus-visible { outline: 2px solid var(--term-green); outline-offset: 2px; }
+.nick-rule { margin: calc(var(--u) * 1.5) 0 0; width: 100%; font-size: calc(var(--u) * 2.6); font-weight: 500; color: var(--term-dim-text); text-align: left; }
+.nick-rule.bad { color: var(--term-red); }
+.nick-form[hidden] + .nick-rule { display: none; }
+.board-note { margin: calc(var(--u) * 2) 0 0; width: 100%; font-size: calc(var(--u) * 2.8); font-weight: 600; color: var(--term-green); }
+.board-note[hidden] { display: none; }
 
 .retry {
   margin-top: calc(var(--u) * 5); min-height: 48px; padding: 0 calc(var(--u) * 8); font: inherit; font-size: calc(var(--u) * 4.6);
@@ -233,6 +246,8 @@
   .over-title { font-size: calc(var(--u) * 6); }
   .final-score { margin-top: 0; font-size: calc(var(--u) * 12); }
   .nick-form { margin-top: calc(var(--u) * 2); }
+  .nick-rule { margin-top: calc(var(--u) * 0.5); }
+  .board-note { margin-top: calc(var(--u) * 1); }
   .board { margin-top: calc(var(--u) * 2); }
   .board li { padding-top: calc(var(--u) * 0.3); padding-bottom: calc(var(--u) * 0.3); }
   .retry { margin-top: calc(var(--u) * 2); }

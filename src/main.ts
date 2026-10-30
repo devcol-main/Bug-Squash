@@ -1,4 +1,4 @@
-import { type LeaderboardEntry, type LeaderboardService } from './shared/leaderboard';
+import { resolveLbEndpoint, type LeaderboardEntry } from './shared/leaderboard';
 import { BugSquashLogic, type EventBuffer } from './core/BugSquashLogic';
 import { DEFAULT_CONFIG, type BugSquashConfig } from './core/config';
 import { createRng } from './core/rng';
@@ -11,7 +11,15 @@ import { vibrationForEvent } from './ui/vibrationCue';
 import { GameFlow } from './ui/flow';
 import { ConfirmGate, effectiveReducedMotion, hudBest, reducedMotionStore, resetUserData, vibrationStore } from './ui/options';
 import { BestScore, browserStorage } from './ui/records';
-import { createBugSquashLeaderboard, createPlayerProfile, makeStats, nicknameToSubmit, type BugSquashStats } from './ui/leaderboard';
+import {
+  boardNote,
+  createBugSquashOnlineLeaderboard,
+  createPlayerProfile,
+  makeStats,
+  nicknameToSubmit,
+  sameLocalEntry,
+  type BugSquashStats,
+} from './ui/leaderboard';
 import { BugSquashUi } from './ui/BugSquashUi';
 import { FrameClock } from './ui/frameClock';
 import { PauseController } from './ui/pause';
@@ -65,7 +73,12 @@ if (canvas instanceof HTMLCanvasElement) {
   const ui = new BugSquashUi(UI_CONFIG.leaderboardSize);
   const best = new BestScore(storage, UI_CONFIG.bestKey);
   const profile = createPlayerProfile(storage);
-  let leaderboard: LeaderboardService<BugSquashStats> = createBugSquashLeaderboard();
+  // 온라인 리더보드 서버: <html data-lb-endpoint>가 있으면 그것, devcol.net이면 기본 서버, 그 밖(로컬 dev)은 로컬 전용.
+  // 개발 모드 전용: ?lb=http://localhost:8787/lb 로 로컬 Worker에 붙인다.
+  const lbOverride = document.documentElement.dataset.lbEndpoint ?? (import.meta.env.DEV ? new URLSearchParams(location.search).get('lb') : null);
+  const lbEndpoint = resolveLbEndpoint(location.hostname, lbOverride);
+  let leaderboard = createBugSquashOnlineLeaderboard(profile, lbEndpoint);
+  ui.onReport = (entryId) => leaderboard.report(entryId);
   ui.setMuted(audio.isMuted());
   ui.syncAudio(audio.getSettings());
   ui.setVibration(vibrationOn);
@@ -95,7 +108,10 @@ if (canvas instanceof HTMLCanvasElement) {
     leaderboard.getTop(UI_CONFIG.leaderboardSize).then(
       (entries) => {
         // 그 사이 재시작했거나 다른 판이면 버린다
-        if (flow.round === round && flow.phase === 'gameOver') ui.renderBoard(entries, mine);
+        if (flow.round !== round || flow.phase !== 'gameOver') return;
+        const fromServer = leaderboard.lastSource === 'online';
+        ui.renderBoard(entries, (e) => (fromServer ? leaderboard.isMine(e) : sameLocalEntry(e, mine)), fromServer);
+        ui.setBoardNote(boardNote(leaderboard.online, leaderboard.lastSource, mine ? leaderboard.lastResult : null));
       },
       () => {},
     );
@@ -113,7 +129,7 @@ if (canvas instanceof HTMLCanvasElement) {
       ts: Date.now(),
     };
     ui.hideNickForm();
-    leaderboard.submit(entry).then(
+    leaderboard.submit({ ...entry, durationMs: Math.round(result.time * 1000) }).then(
       () => refreshBoard(entry),
       () => refreshBoard(null),
     );
@@ -283,6 +299,7 @@ if (canvas instanceof HTMLCanvasElement) {
   const closeOptions = (): void => {
     if (!flow.optionsOpen) return;
     cancelReset();
+    cancelLbDelete();
     flow.closeOptions();
     ui.setOptionsOpen(false);
     // 열었던 버튼에 포커스가 남아 Space가 패널을 다시 열지 않게 blur
@@ -307,6 +324,33 @@ if (canvas instanceof HTMLCanvasElement) {
       first.focus();
     }
   };
+  // 온라인 기록 삭제: Reset과 같은 2단계 확인. 토큰은 모든 게임이 같이 쓰므로 모든 게임의 내 온라인 기록이 지워진다.
+  const lbDeleteGate = new ConfirmGate(UI_CONFIG.resetConfirmMs);
+  let lbDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+  let lbDeleting = false;
+  const cancelLbDelete = (): void => {
+    lbDeleteGate.cancel();
+    if (lbDeleteTimer !== null) clearTimeout(lbDeleteTimer);
+    lbDeleteTimer = null;
+    if (!lbDeleting) ui.setLbDeleteState('idle');
+  };
+  ui.optLbDelete.addEventListener('click', () => {
+    if (lbDeleting) return;
+    if (lbDeleteGate.press(performance.now()) === 'armed') {
+      ui.setLbDeleteState('armed');
+      if (lbDeleteTimer !== null) clearTimeout(lbDeleteTimer);
+      lbDeleteTimer = setTimeout(cancelLbDelete, UI_CONFIG.resetConfirmMs);
+      return;
+    }
+    cancelLbDelete();
+    lbDeleting = true;
+    ui.setLbDeleteState('busy');
+    leaderboard.deleteMine().then((r) => {
+      lbDeleting = false;
+      ui.setLbDeleteState(r);
+      if (flow.phase === 'gameOver') refreshBoard(null);
+    });
+  });
   ui.optionsButton.addEventListener('click', openOptions);
   ui.optClose.addEventListener('click', closeOptions);
   ui.optSound.addEventListener('click', () => toggleMute());
@@ -334,10 +378,10 @@ if (canvas instanceof HTMLCanvasElement) {
     }
     cancelReset();
     resetUserData({ best, storage, leaderboardKey: UI_CONFIG.leaderboardKey });
-    leaderboard = createBugSquashLeaderboard(); // 메모리에 남은 기록도 비운다
+    leaderboard = createBugSquashOnlineLeaderboard(profile, lbEndpoint); // 메모리에 남은 로컬 기록도 비운다
     ui.setTitleBest(best.value);
     ui.refreshAfterReset();
-    if (flow.phase === 'gameOver') ui.renderBoard([], null);
+    if (flow.phase === 'gameOver') refreshBoard(null); // 온라인 순위표는 Reset과 무관하다
   });
   audio.onSettingsChange((s) => ui.syncAudio(s));
 
