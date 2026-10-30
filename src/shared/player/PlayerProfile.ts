@@ -5,10 +5,15 @@ import { MAX_NICKNAME_LENGTH } from '../leaderboard';
 export interface ProfileStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
 }
 
 export const PLAYER_ID_KEY = 'devcol.player.id';
 export const PLAYER_NICKNAME_KEY = 'devcol.player.nickname';
+/** 온라인 리더보드 소유 토큰 (서버가 첫 제출 때 발급). 내 기록 삭제에 필요하다. playerId는 서버로 보내지 않는다. */
+export const PLAYER_TOKEN_KEY = 'devcol.player.token';
+/** 온라인 리더보드의 내 항목 id, 게임별 {gameId: entryId}. 순위표에서 내 줄 표시용. */
+export const PLAYER_LB_ENTRIES_KEY = 'devcol.player.lbEntries';
 /** 옛 게임별 닉네임 키. Stack Up이 더 오래된 게임이고 기존 리더보드 기록과 이름이 맞으므로 먼저 본다. */
 export const LEGACY_NICKNAME_KEYS: readonly string[] = ['stackup.nickname', 'bugSquash.nickname'];
 
@@ -47,6 +52,9 @@ export class PlayerProfile {
   private readonly generateId: () => string;
   private id: string | null = null;
   private nick: string | null = null;
+  /** undefined = 아직 안 읽음 */
+  private tok: string | null | undefined = undefined;
+  private entries: Record<string, number> | null = null;
 
   constructor(opts: PlayerProfileOptions = {}) {
     this.storage = opts.storage === null ? undefined : (opts.storage ?? defaultStorage());
@@ -66,6 +74,14 @@ export class PlayerProfile {
   private write(key: string, value: string): void {
     try {
       this.storage?.setItem(key, value);
+    } catch {
+      // 저장 불가: 세션 메모리 값만 유지
+    }
+  }
+
+  private remove(key: string): void {
+    try {
+      this.storage?.removeItem?.(key);
     } catch {
       // 저장 불가: 세션 메모리 값만 유지
     }
@@ -108,5 +124,53 @@ export class PlayerProfile {
   setNickname(nick: string): void {
     this.nick = nick.slice(0, this.maxLen);
     this.write(PLAYER_NICKNAME_KEY, this.nick);
+  }
+
+  /** 온라인 리더보드 토큰. 없으면 null. */
+  get token(): string | null {
+    if (this.tok !== undefined) return this.tok;
+    const v = this.read(PLAYER_TOKEN_KEY);
+    this.tok = v && /^[0-9a-f]{64}$/.test(v) ? v : null;
+    return this.tok;
+  }
+
+  /** null이면 토큰과 내 항목 id를 모두 지운다 (서버에서 삭제했거나 토큰이 더는 유효하지 않을 때). */
+  setToken(token: string | null): void {
+    this.tok = token;
+    if (token) {
+      this.write(PLAYER_TOKEN_KEY, token);
+      return;
+    }
+    this.remove(PLAYER_TOKEN_KEY);
+    this.entries = {};
+    this.remove(PLAYER_LB_ENTRIES_KEY);
+  }
+
+  private loadEntries(): Record<string, number> {
+    if (this.entries) return this.entries;
+    const out: Record<string, number> = {};
+    try {
+      const parsed: unknown = JSON.parse(this.read(PLAYER_LB_ENTRIES_KEY) ?? '{}');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+          if (typeof v === 'number' && Number.isInteger(v)) out[k] = v;
+        }
+      }
+    } catch {
+      // 손상된 값: 비운다
+    }
+    this.entries = out;
+    return out;
+  }
+
+  /** 이 게임의 내 온라인 항목 id. 없으면 null. */
+  ownEntryId(gameId: string): number | null {
+    return this.loadEntries()[gameId] ?? null;
+  }
+
+  setOwnEntryId(gameId: string, entryId: number): void {
+    const e = this.loadEntries();
+    e[gameId] = entryId;
+    this.write(PLAYER_LB_ENTRIES_KEY, JSON.stringify(e));
   }
 }
